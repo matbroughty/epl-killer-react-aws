@@ -98,9 +98,10 @@ export default function App() {
         borderRadius: 10,
         border: '1px solid #2d3748'
       }}>
-        <input 
-          value={url} 
-          onChange={e => setUrl(e.target.value)} 
+        <input
+          type="text"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
           placeholder="Enter CSV URL"
           style={{
             flex: 1,
@@ -111,11 +112,10 @@ export default function App() {
             color: '#e8ebf2',
             fontSize: '0.95rem',
             outline: 'none',
-            transition: 'border-color 0.2s',
-            ':focus': {
-              borderColor: '#4299e1'
-            }
-          }}
+            transition: 'border-color 0.2s'
+          } as React.CSSProperties}
+          onFocus={e => e.target.style.borderColor = '#4299e1'}
+          onBlur={e => e.target.style.borderColor = '#2d3748'}
         />
         <button 
           onClick={load} 
@@ -129,14 +129,12 @@ export default function App() {
             fontWeight: 600,
             cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
-            ':hover': !loading ? {
-              background: '#3182ce',
-              transform: 'translateY(-1px)'
-            } : {},
-            ':active': !loading ? {
-              transform: 'translateY(0)'
-            } : {}
-          }}
+            transform: 'translateY(0)'
+          } as React.CSSProperties}
+          onMouseEnter={e => !loading && (e.currentTarget.style.background = '#3182ce', e.currentTarget.style.transform = 'translateY(-1px)')}
+          onMouseLeave={e => !loading && (e.currentTarget.style.background = '#4299e1', e.currentTarget.style.transform = 'translateY(0)')}
+          onMouseDown={e => !loading && (e.currentTarget.style.transform = 'translateY(0)')}
+          onMouseUp={e => !loading && (e.currentTarget.style.transform = 'translateY(-1px)')}
         >
           {loading ? (
             <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

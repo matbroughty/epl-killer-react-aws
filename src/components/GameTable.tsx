@@ -63,12 +63,21 @@ export const GameTable: React.FC<Props> = ({ index, headers, rows }) => {
           </thead>
           <tbody>
             {rows.map((r, ri) => (
-              <tr key={ri} style={{
-                transition: 'background-color 0.2s ease',
-                ':hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.03)'
-                }
-              }}>
+              <tr 
+                key={ri} 
+                style={{
+                  transition: 'background-color 0.2s ease',
+                  backgroundColor: 'transparent'
+                } as React.CSSProperties}
+                onMouseEnter={(e) => {
+                  const target = e.currentTarget as HTMLTableRowElement;
+                  target.style.backgroundColor = 'rgba(255, 255, 255, 0.03)';
+                }}
+                onMouseLeave={(e) => {
+                  const target = e.currentTarget as HTMLTableRowElement;
+                  target.style.backgroundColor = 'transparent';
+                }}
+              >
                 {headers.map((_, ci) => (
                   <td key={ci} style={{
                     textAlign: 'center',
