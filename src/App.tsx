@@ -85,7 +85,7 @@ export default function App() {
         }}>
           EPL Killer
         </h1>
-        <div style={{ color: '#a0aec0', fontSize: '0.95rem' }}>Premier League Fantasy Football Tracker</div>
+        <div style={{ color: '#a0aec0', fontSize: '0.95rem' }}>Premier League - Last Person Standing</div>
       </div>
       
       <div style={{ 
