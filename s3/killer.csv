@@ -1,6 +1,37 @@
 Mat,Jase,Pia,Jon,Frank,Tim,Todd,George,Erik,Dave,Matt
+Man City,Man City,Man City,Man City,Man City,Man City,Sunderland,Sunderland,Chelsea,Brentford,Fulham
+---,---,---,---,---,---,---,---,---,---,---
+Arsenal,Brighton,Aston Villa, Arsenal,Newcastle, Villa, Villa, Wolves, x, Villa, Villa
+Everton,x,Everton,Man Utd,Man City,x,Everton,Newcastle,x,Necastle,Man City
+x,x,x,x,x,x,x,Spurs,x,Arsenal,x
+x,x,x,x,x,x,x,x,x,x,x
+---,---,---,---,---,---,---,---,---,---,---
+Man City,Liverpool,Arsenal,Liverpool,Man City,Arsenal,x,Arsenal,Arsenal,Liverpool,Liverpool
+Chelsea,Man Utd,Man Utd,Man Utd,Man Utd,Man Utd,x,Chelsea,Newcastle,Man Utd,Man Utd
+x,x,x,x,x,x,x,x,+,x,x
+---,---,---,---,---,---,---,---,---,---,---
+Villa,Brentford,Man City,Villa,Man City,West Ham,Brentford,Villa,Man City,Man City,Villa
+Arsenal,Man Utd,Arsenal,Arsenal,Arsenal,x,Liverpool,Newcastle,Chelsea,Man U,Chelsea,
+Newastle,x,Brighton,Newcastle,Newcastle,x,x,x,x,x,x
+Liverpool,x,x,Man City,Chelsea,x,x,x,x,x,x
+Man City,x,x,Bournemouth,Bournemouth,x,x,x,x,x,x
++,x,x,x,x,x,x,x,x,x,x
+---,---,---,---,---,---,---,---,---,---,---
+Arsenal,Leeds,Bournemouth,Chelsea,Chelsea,Arsenal,Leeds,Bournemouth,Chelsea,Arsenal,Chelsea
+Fulham,Liverpool,Man U,x,x,Sunderland,Liverpool,Arsenal,x,Newcastle,x
+Chelsea,Wolves,x,x,x,x,Chelsea,Chelsea,x,x,x
+Liverpool,x,x,x,x,x,Liverpool,Palace,x,x,x
+x,x,x,x,x,x,x,+,x,x,x
+---,---,---,---,---,---,---,---,---,---,---
 Spurs,Liverpool,Liverpool,Liverpool,Man City,Man Utd,?,Forest,Spurs,Spurs,Liverpool
-?,?,?,?,?,x,x,?,?,?,?
+Liverpool,Arsenal,Arsenal,Arsenal,Bournemouth,x,x,Arsenal,Man Utd,Bournemouth,Arsenal
+Man U, Man U, Spurs, Chelsea, Man U, x,x,Man City, x,Chelsea,Man City
+Arsenal,Newcastle , x, Newcastle, Newcastle, x,x,x, x,Arsenal,x
+Bournemouth,Fulham, x, Fulham, Liverpool, x,x,x, x,Liverpool,x
+x,Man City, x, Man City, Everton, x,x,x, x,Man City,x
+x,Villa, x, Villa, x, x,x,x, x,Newcastle,x
+x,Leeds, x, Spurs, x, x,x,x, x,Sunderland,x
+x,x, x, x, x, x,x,x, x,+,x
 ---,---,---,---,---,---,---,---,---,---,---
 Chelsea,Brighton,Brighton,Chelsea,Chelsea,Liverpool,Arsenal,Aston Villa,Liverpool,Aston Villa,Chelsea
 x,x,x,x,x,West Ham,x,Liverpool,West Ham,Liverpool,x

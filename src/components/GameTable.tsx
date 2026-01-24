@@ -1,5 +1,7 @@
 import React from 'react';
 import { MarkCell } from './MarkCell';
+import { MobileGameView } from './MobileGameView';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 function statusForGame(gameRows: string[][]) {
   if (!gameRows.length) return { label: 'Empty', kind: 'neutral' as const };
@@ -14,7 +16,7 @@ type Props = {
   rows: string[][];
 };
 
-export const GameTable: React.FC<Props> = ({ index, headers, rows }) => {
+const DesktopGameTable: React.FC<Props> = ({ index, headers, rows }) => {
   const status = statusForGame(rows);
 
   return (
@@ -63,8 +65,8 @@ export const GameTable: React.FC<Props> = ({ index, headers, rows }) => {
           </thead>
           <tbody>
             {rows.map((r, ri) => (
-              <tr 
-                key={ri} 
+              <tr
+                key={ri}
                 style={{
                   transition: 'background-color 0.2s ease',
                   backgroundColor: 'transparent'
@@ -96,4 +98,14 @@ export const GameTable: React.FC<Props> = ({ index, headers, rows }) => {
       </div>
     </div>
   );
+};
+
+export const GameTable: React.FC<Props> = (props) => {
+  const isMobile = useMediaQuery('(max-width: 639px)');
+
+  if (isMobile) {
+    return <MobileGameView {...props} />;
+  }
+
+  return <DesktopGameTable {...props} />;
 };

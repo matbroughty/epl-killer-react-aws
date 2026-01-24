@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GameTable } from '@/components/GameTable';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 
 const CSV_URL = import.meta.env.VITE_CSV_URL as string;
 
@@ -40,6 +41,7 @@ export default function App() {
   const [error, setError] = useState<string>('');
   const [headers, setHeaders] = useState<string[]>([]);
   const [games, setGames] = useState<string[][][]>([]);
+  const isMobile = useMediaQuery('(max-width: 639px)');
 
   const load = async () => {
     setError('');
@@ -71,10 +73,15 @@ export default function App() {
   useEffect(() => { load(); }, []);
 
   return (
-    <div style={{ maxWidth: 1100, margin: '32px auto', padding: '0 16px', color: '#e8ebf2' }}>
-      <div style={{ marginBottom: 32 }}>
+    <div style={{
+      maxWidth: 1100,
+      margin: isMobile ? '16px auto' : '32px auto',
+      padding: isMobile ? '0 12px' : '0 16px',
+      color: '#e8ebf2'
+    }}>
+      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
         <h1 style={{
-          fontSize: '2.5rem',
+          fontSize: isMobile ? '1.75rem' : '2.5rem',
           fontWeight: 800,
           margin: 0,
           background: 'linear-gradient(90deg, #e8ebf2, #a0aec0)',
@@ -85,16 +92,22 @@ export default function App() {
         }}>
           EPL Killer
         </h1>
-        <div style={{ color: '#a0aec0', fontSize: '0.95rem' }}>Premier League - Last Person Standing</div>
+        <div style={{
+          color: '#a0aec0',
+          fontSize: isMobile ? '0.85rem' : '0.95rem'
+        }}>
+          Premier League - Last Person Standing
+        </div>
       </div>
-      
-      <div style={{ 
-        display: 'flex', 
-        gap: 12, 
-        alignItems: 'center', 
-        marginBottom: 32,
+
+      <div style={{
+        display: 'flex',
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: 12,
+        alignItems: isMobile ? 'stretch' : 'center',
+        marginBottom: isMobile ? 20 : 32,
         background: '#1a2032',
-        padding: '12px 16px',
+        padding: isMobile ? '12px' : '12px 16px',
         borderRadius: 10,
         border: '1px solid #2d3748'
       }}>
@@ -105,23 +118,24 @@ export default function App() {
           placeholder="Enter CSV URL"
           style={{
             flex: 1,
-            padding: '10px 14px',
+            padding: isMobile ? '12px 14px' : '10px 14px',
             borderRadius: 6,
             border: '1px solid #2d3748',
             background: '#121623',
             color: '#e8ebf2',
-            fontSize: '0.95rem',
+            fontSize: isMobile ? '1rem' : '0.95rem',
             outline: 'none',
-            transition: 'border-color 0.2s'
+            transition: 'border-color 0.2s',
+            width: isMobile ? '100%' : 'auto',
           } as React.CSSProperties}
           onFocus={e => e.target.style.borderColor = '#4299e1'}
           onBlur={e => e.target.style.borderColor = '#2d3748'}
         />
-        <button 
-          onClick={load} 
+        <button
+          onClick={load}
           disabled={loading}
           style={{
-            padding: '10px 20px',
+            padding: isMobile ? '12px 20px' : '10px 20px',
             borderRadius: 6,
             border: 'none',
             background: loading ? '#2d3748' : '#4299e1',
@@ -129,7 +143,9 @@ export default function App() {
             fontWeight: 600,
             cursor: loading ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s',
-            transform: 'translateY(0)'
+            transform: 'translateY(0)',
+            width: isMobile ? '100%' : 'auto',
+            minHeight: 48,
           } as React.CSSProperties}
           onMouseEnter={e => !loading && (e.currentTarget.style.background = '#3182ce', e.currentTarget.style.transform = 'translateY(-1px)')}
           onMouseLeave={e => !loading && (e.currentTarget.style.background = '#4299e1', e.currentTarget.style.transform = 'translateY(0)')}
@@ -137,7 +153,7 @@ export default function App() {
           onMouseUp={e => !loading && (e.currentTarget.style.transform = 'translateY(-1px)')}
         >
           {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <span className="spinner" style={{
                 display: 'inline-block',
                 width: '14px',
@@ -152,7 +168,14 @@ export default function App() {
           ) : 'Refresh Data'}
         </button>
       </div>
-      {error && <div>Error: {error}</div>}
+      {error && <div style={{
+        marginBottom: 16,
+        padding: '12px 16px',
+        background: 'rgba(255, 107, 107, 0.1)',
+        border: '1px solid rgba(255, 107, 107, 0.3)',
+        borderRadius: 8,
+        color: '#ff6b6b'
+      }}>Error: {error}</div>}
       <div>
         {games.map((g, i) => (
           <GameTable key={i} index={i} headers={headers} rows={g} />

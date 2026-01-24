@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/amplify.ts","./src/main.tsx","./src/components/gametable.tsx","./src/components/markcell.tsx"],"version":"5.9.2"}
+{"root":["./src/app.tsx","./src/amplify.ts","./src/main.tsx","./src/components/gametable.tsx","./src/components/markcell.tsx","./src/components/mobilegameview.tsx","./src/hooks/usemediaquery.ts","./src/utils/teamabbreviations.ts"],"version":"5.9.2"}
