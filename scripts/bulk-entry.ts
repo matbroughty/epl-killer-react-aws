@@ -29,13 +29,9 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { argv, env, exit } from 'node:process';
-import { Amplify } from 'aws-amplify';
-import { signIn } from 'aws-amplify/auth';
-import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
-import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '../amplify/data/resource.js';
+import { argv, exit } from 'node:process';
 import { resolveTeamName } from '../shared/domain/teamNames.js';
+import { openAdminSession, payload } from './adminSession.js';
 
 interface Row {
   line: number;
@@ -51,6 +47,7 @@ interface Options {
   outputsPath: string;
   matchday: number | null;
   roundId: string | null;
+  email: string | null;
 }
 
 function parseArgs(): Options {
@@ -68,11 +65,11 @@ Options:
   --matchday <n>    Target gameweek. Default: the round's open week.
   --round <id>      Killer Round id. Default: the active round.
   --outputs <path>  amplify_outputs.json. Default: ./amplify_outputs.json
+  --email <address> Admin email. Otherwise KILLER_ADMIN_EMAIL, otherwise asked.
   --help
 
-Environment:
-  KILLER_ADMIN_EMAIL     Cognito email of an ADMIN user
-  KILLER_ADMIN_PASSWORD  that user's password
+The password is asked for at a hidden prompt. Set KILLER_ADMIN_PASSWORD to skip
+that, but be aware an inline assignment lands in your shell history.
 `);
     exit(0);
   }
@@ -92,6 +89,7 @@ Environment:
     outputsPath: valueOf('--outputs') ?? 'amplify_outputs.json',
     matchday: matchday ? Number(matchday) : null,
     roundId: valueOf('--round') ?? null,
+    email: valueOf('--email') ?? null,
   };
 }
 
@@ -135,21 +133,6 @@ function parseRows(text: string): { rows: Row[]; problems: string[] } {
   return { rows, problems };
 }
 
-function useInMemoryTokenStorage(): void {
-  const store = new Map<string, string>();
-  cognitoUserPoolsTokenProvider.setKeyValueStorage({
-    setItem: async (key: string, value: string) => void store.set(key, value),
-    getItem: async (key: string) => store.get(key) ?? null,
-    removeItem: async (key: string) => void store.delete(key),
-    clear: async () => void store.clear(),
-  });
-}
-
-/** Custom operations return AWSJSON, which arrives as a string. */
-function payload<T>(data: unknown): T {
-  return (typeof data === 'string' ? JSON.parse(data) : data) as T;
-}
-
 async function main(): Promise<void> {
   const options = parseArgs();
   const { rows, problems } = parseRows(await readFile(options.file, 'utf8'));
@@ -187,23 +170,7 @@ async function main(): Promise<void> {
 
   // --- Connect -------------------------------------------------------------
 
-  const outputs = JSON.parse(await readFile(options.outputsPath, 'utf8')) as Record<string, unknown>;
-  useInMemoryTokenStorage();
-  Amplify.configure(outputs as Parameters<typeof Amplify.configure>[0]);
-
-  const email = env['KILLER_ADMIN_EMAIL'];
-  const password = env['KILLER_ADMIN_PASSWORD'];
-  if (!email || !password) {
-    console.error('Set KILLER_ADMIN_EMAIL and KILLER_ADMIN_PASSWORD.');
-    exit(1);
-  }
-  const signInResult = await signIn({ username: email, password });
-  if (signInResult.nextStep.signInStep !== 'DONE') {
-    console.error(`Sign-in needs "${signInResult.nextStep.signInStep}" first.`);
-    exit(1);
-  }
-  const client = generateClient<Schema>({ authMode: 'userPool' });
-  console.log(`\nSigned in as ${email}.`);
+  const { client } = await openAdminSession(options.outputsPath, options.email);
 
   // --- Target round and week ----------------------------------------------
 

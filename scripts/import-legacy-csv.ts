@@ -21,12 +21,8 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises';
-import { argv, env, exit } from 'node:process';
-import { Amplify } from 'aws-amplify';
-import { signIn } from 'aws-amplify/auth';
-import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
-import { generateClient } from 'aws-amplify/data';
-import type { Schema } from '../amplify/data/resource.js';
+import { argv, exit } from 'node:process';
+import { openAdminSession } from './adminSession.js';
 import {
   collectLegacyTeams,
   parseKillerCsv,
@@ -70,9 +66,9 @@ Options:
   --report <path>       Where to write the report. Default: ${REPORT_PATH}
   --help                Show this.
 
-Environment:
-  KILLER_ADMIN_EMAIL     Cognito email of an ADMIN user (required to commit)
-  KILLER_ADMIN_PASSWORD  that user's password
+Credentials are asked for at a prompt (the password is hidden). Set
+KILLER_ADMIN_EMAIL / KILLER_ADMIN_PASSWORD to skip the prompts, though an inline
+assignment lands in your shell history.
 
 The admin must have signed in through the website at least once, so their
 temporary password has been replaced.
@@ -97,27 +93,6 @@ temporary password has been replaced.
 // ---------------------------------------------------------------------------
 // Amplify in Node
 // ---------------------------------------------------------------------------
-
-/**
- * Amplify's token provider expects browser storage. In a script there is none,
- * so give it a map — tokens live for the length of the process and no further,
- * which is what we want for a one-off admin task.
- */
-function useInMemoryTokenStorage(): void {
-  const store = new Map<string, string>();
-  cognitoUserPoolsTokenProvider.setKeyValueStorage({
-    setItem: async (key: string, value: string) => {
-      store.set(key, value);
-    },
-    getItem: async (key: string) => store.get(key) ?? null,
-    removeItem: async (key: string) => {
-      store.delete(key);
-    },
-    clear: async () => {
-      store.clear();
-    },
-  });
-}
 
 async function readSource(source: string): Promise<string> {
   if (/^https?:\/\//i.test(source)) {
@@ -206,32 +181,7 @@ async function main(): Promise<void> {
 
   // --- Connect -------------------------------------------------------------
 
-  const outputs = JSON.parse(await readFile(options.outputsPath, 'utf8')) as Record<
-    string,
-    unknown
-  >;
-  useInMemoryTokenStorage();
-  Amplify.configure(outputs as Parameters<typeof Amplify.configure>[0]);
-
-  const email = env['KILLER_ADMIN_EMAIL'];
-  const password = env['KILLER_ADMIN_PASSWORD'];
-  if (!email || !password) {
-    console.error(
-      'Set KILLER_ADMIN_EMAIL and KILLER_ADMIN_PASSWORD to an ADMIN Cognito user before committing.',
-    );
-    exit(1);
-  }
-
-  const signInResult = await signIn({ username: email, password });
-  if (signInResult.nextStep.signInStep !== 'DONE') {
-    console.error(
-      `That account needs "${signInResult.nextStep.signInStep}" first. Sign in through the website once, then rerun.`,
-    );
-    exit(1);
-  }
-  console.log(`Signed in as ${email}.`);
-
-  const client = generateClient<Schema>({ authMode: 'userPool' });
+  const { client } = await openAdminSession(options.outputsPath);
 
   // --- Legacy season -------------------------------------------------------
   //
