@@ -1,22 +1,31 @@
 {
-  "name": "last-man-standing",
+  "name": "fourfold-killer",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "typecheck:backend": "tsc --noEmit -p amplify/tsconfig.json",
+    "sandbox": "ampx sandbox",
+    "import:legacy": "tsx scripts/import-legacy-csv.ts",
+    "bulk": "tsx scripts/bulk-entry.ts"
   },
   "dependencies": {
     "aws-amplify": "^6.15.5",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.1"
   },
   "devDependencies": {
     "@aws-amplify/backend": "^1.16.1",
     "@aws-amplify/backend-cli": "^1.8.0",
-    "@aws-amplify/cli": "^14.0.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.864.0",
+    "@types/aws-lambda": "^8.10.152",
     "@types/node": "^24.3.0",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
@@ -26,6 +35,7 @@
     "esbuild": "^0.25.9",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^2.1.9"
   }
 }

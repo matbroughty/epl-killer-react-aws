@@ -1,186 +1,123 @@
-import React, { useEffect, useState } from 'react';
-import { GameTable } from '@/components/GameTable';
-import { useMediaQuery } from '@/hooks/useMediaQuery';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { AdminPage } from '@/pages/admin/AdminPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { HomePage } from '@/pages/HomePage';
+import { LoginPage } from '@/pages/LoginPage';
+import { useAuth } from '@/lib/auth';
 
-const CSV_URL = import.meta.env.VITE_CSV_URL as string;
-
-// Add global styles for the loading spinner
-const styles = document.createElement('style');
-styles.textContent = `
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-`;
-document.head.appendChild(styles);
-
-function parseCsvSimple(text: string): string[][] {
-  return text.trim().split(/\r?\n/).map(line => line.split(',').map(s => s.trim()));
-}
-
-function splitIntoGames(rows: string[][], headerLen: number): string[][][] {
-  const games: string[][][] = [];
-  let current: string[][] = [];
-  for (const row of rows) {
-    const isSep = row.length >= headerLen && row.slice(0, headerLen).every(c => (c ?? '').trim() === '---');
-    if (isSep) {
-      if (current.length) {
-        games.push(current);
-        current = [];
-      }
-    } else {
-      current.push(row);
-    }
-  }
-  if (current.length) games.push(current);
-  return games;
-}
-
+/**
+ * The application shell and routes.
+ *
+ * Four routes. The public competition view is the default, so the site remains
+ * useful to anyone who follows a link without an account.
+ */
 export default function App() {
-  const [url, setUrl] = useState(CSV_URL || '');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [games, setGames] = useState<string[][][]>([]);
-  const isMobile = useMediaQuery('(max-width: 639px)');
-
-  const load = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      if (!url) throw new Error('CSV URL is empty');
-      const res = await fetch(url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const rows = parseCsvSimple(text);
-      if (rows.length === 0) throw new Error('CSV is empty');
-      const hdr = rows[0].map(s => s || '');
-      const body = rows.slice(1);
-      const normalized = body.map(r => {
-        const copy = r.slice(0, hdr.length);
-        while (copy.length < hdr.length) copy.push('');
-        return copy;
-      });
-      const gamesSplit = splitIntoGames(normalized, hdr.length);
-      setHeaders(hdr);
-      setGames(gamesSplit);
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
-
   return (
-    <div style={{
-      maxWidth: 1100,
-      margin: isMobile ? '16px auto' : '32px auto',
-      padding: isMobile ? '0 12px' : '0 16px',
-      color: '#e8ebf2'
-    }}>
-      <div style={{ marginBottom: isMobile ? 20 : 32 }}>
-        <h1 style={{
-          fontSize: isMobile ? '1.75rem' : '2.5rem',
-          fontWeight: 800,
-          margin: 0,
-          background: 'linear-gradient(90deg, #e8ebf2, #a0aec0)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          display: 'inline-block',
-          marginBottom: '8px'
-        }}>
-          EPL Killer
-        </h1>
-        <div style={{
-          color: '#a0aec0',
-          fontSize: isMobile ? '0.85rem' : '0.95rem'
-        }}>
-          Premier League - Last Person Standing
-        </div>
-      </div>
-
-      <div style={{
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        gap: 12,
-        alignItems: isMobile ? 'stretch' : 'center',
-        marginBottom: isMobile ? 20 : 32,
-        background: '#1a2032',
-        padding: isMobile ? '12px' : '12px 16px',
-        borderRadius: 10,
-        border: '1px solid #2d3748'
-      }}>
-        <input
-          type="text"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          placeholder="Enter CSV URL"
-          style={{
-            flex: 1,
-            padding: isMobile ? '12px 14px' : '10px 14px',
-            borderRadius: 6,
-            border: '1px solid #2d3748',
-            background: '#121623',
-            color: '#e8ebf2',
-            fontSize: isMobile ? '1rem' : '0.95rem',
-            outline: 'none',
-            transition: 'border-color 0.2s',
-            width: isMobile ? '100%' : 'auto',
-          } as React.CSSProperties}
-          onFocus={e => e.target.style.borderColor = '#4299e1'}
-          onBlur={e => e.target.style.borderColor = '#2d3748'}
-        />
-        <button
-          onClick={load}
-          disabled={loading}
-          style={{
-            padding: isMobile ? '12px 20px' : '10px 20px',
-            borderRadius: 6,
-            border: 'none',
-            background: loading ? '#2d3748' : '#4299e1',
-            color: 'white',
-            fontWeight: 600,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s',
-            transform: 'translateY(0)',
-            width: isMobile ? '100%' : 'auto',
-            minHeight: 48,
-          } as React.CSSProperties}
-          onMouseEnter={e => !loading && (e.currentTarget.style.background = '#3182ce', e.currentTarget.style.transform = 'translateY(-1px)')}
-          onMouseLeave={e => !loading && (e.currentTarget.style.background = '#4299e1', e.currentTarget.style.transform = 'translateY(0)')}
-          onMouseDown={e => !loading && (e.currentTarget.style.transform = 'translateY(0)')}
-          onMouseUp={e => !loading && (e.currentTarget.style.transform = 'translateY(-1px)')}
-        >
-          {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span className="spinner" style={{
-                display: 'inline-block',
-                width: '14px',
-                height: '14px',
-                border: '2px solid rgba(255,255,255,0.3)',
-                borderRadius: '50%',
-                borderTopColor: 'white',
-                animation: 'spin 1s ease-in-out infinite',
-              }} />
-              Loading...
-            </span>
-          ) : 'Refresh Data'}
-        </button>
-      </div>
-      {error && <div style={{
-        marginBottom: 16,
-        padding: '12px 16px',
-        background: 'rgba(255, 107, 107, 0.1)',
-        border: '1px solid rgba(255, 107, 107, 0.3)',
-        borderRadius: 8,
-        color: '#ff6b6b'
-      }}>Error: {error}</div>}
-      <div>
-        {games.map((g, i) => (
-          <GameTable key={i} index={i} headers={headers} rows={g} />
-        ))}
-      </div>
+    <div className="shell">
+      <Masthead />
+      <main>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/admin/*"
+            element={
+              <RequireAdmin>
+                <AdminPage />
+              </RequireAdmin>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+      <SiteFooter />
     </div>
   );
+}
+
+/**
+ * Attribution is a condition of the football-data.org free tier, which requires
+ * a visible credit in the footer, about section or similar. It is a licence
+ * obligation, not decoration — do not remove it while that provider is in use.
+ */
+function SiteFooter() {
+  return (
+    <footer className="footer">
+      <p>
+        Football data provided by the{' '}
+        <a href="https://www.football-data.org/" target="_blank" rel="noreferrer noopener">
+          Football-Data.org
+        </a>{' '}
+        API.
+      </p>
+      <p>Fourfold Killer · times shown in UK local time</p>
+    </footer>
+  );
+}
+
+function Masthead() {
+  const { user, signOut } = useAuth();
+
+  return (
+    <header className="masthead">
+      <div className="masthead__brand">
+        <NavLink to="/" className="masthead__title" style={{ color: 'inherit' }}>
+          Fourfold <span>Killer</span>
+        </NavLink>
+        <span className="masthead__sub">Premier League Last Man Standing</span>
+      </div>
+
+      <nav className="masthead__nav">
+        <NavLink
+          to="/history"
+          className={({ isActive }) => `navlink ${isActive ? 'navlink--active' : ''}`}
+        >
+          History
+        </NavLink>
+        {user?.isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) => `navlink ${isActive ? 'navlink--active' : ''}`}
+          >
+            Admin
+          </NavLink>
+        )}
+        {user ? (
+          <button type="button" className="navlink" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        ) : (
+          <NavLink
+            to="/login"
+            className={({ isActive }) => `navlink ${isActive ? 'navlink--active' : ''}`}
+          >
+            Sign in
+          </NavLink>
+        )}
+      </nav>
+    </header>
+  );
+}
+
+/**
+ * Hides the admin area from everyone else.
+ *
+ * A convenience, not a control: every admin operation is authorized again by
+ * AppSync against the signed token, so bypassing this in the browser gets you a
+ * page of failed requests.
+ */
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div className="loading">Loading…</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.isAdmin) {
+    return (
+      <div className="notice notice--error" role="alert">
+        This area is for administrators.
+      </div>
+    );
+  }
+  return <>{children}</>;
 }

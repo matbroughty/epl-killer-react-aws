@@ -1,17 +1,18 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "module": "es2022",
+    "target": "ES2022",
+    "module": "ESNext",
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
+    "lib": ["ES2022"],
+    "types": ["node"],
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
     "paths": {
-      "$amplify/*": [
-        "../.amplify/generated/*"
-      ]
+      "$amplify/*": ["../.amplify/generated/*"]
     }
-  }
+  },
+  "include": [".", "../shared"]
 }
