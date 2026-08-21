@@ -14,3 +14,6 @@ coverage/
 
 # Weekly pick lists contain real email addresses
 picks-*.txt
+
+# Production outputs pulled locally for scripts
+.prod/
