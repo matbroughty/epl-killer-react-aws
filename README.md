@@ -616,8 +616,15 @@ When every pick in a week has resolved:
 
 The next Round Week is never created automatically.
 
-A week with any pending pick decides nothing — not even for players whose own fixture has finished.
-We do not crown a winner while a rearranged match could still eliminate them.
+**Eliminations apply as soon as a player's own fixture resolves**, without waiting for the rest of
+the gameweek. A lost or drawn fixture is final, and a gameweek routinely spans Friday to Sunday —
+so holding the status back would show a red ✗ against a pick while the player still read "Alive",
+sometimes for two days.
+
+**The round's outcome does wait for everything.** You cannot know who is last standing while a
+fixture is outstanding, so `WON` and `ROLLOVER` are only decided once every selection in the week
+has resolved. A postponed match therefore delays the *result of the round*, never an individual
+elimination that is already certain.
 
 ### Manual processing and overrides
 

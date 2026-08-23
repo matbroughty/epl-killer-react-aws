@@ -211,12 +211,64 @@ describe('planResultProcessing', () => {
     );
 
     expect(plan.pendingCount).toBe(1);
+    // The *round* is undecided: no winner and no rollover while a fixture could
+    // still change who is last standing.
     expect(plan.roundOutcome).toBeNull();
     expect(plan.winnerEntryId).toBeNull();
-    // Nobody is eliminated while the week is undecided, not even the player
-    // whose team already lost — their fate is known but the week's is not.
-    expect(plan.eliminateEntries).toEqual([]);
     expect(plan.weekStatus).toEqual({ toStatus: 'RESULTS_PENDING', at: NOW });
+    // But the player whose team has already lost is out immediately. Their
+    // fixture finished and there is no way back from it, so making them wait
+    // would show a lost pick next to an "Alive" status.
+    expect(plan.eliminateEntries).toEqual([
+      { roundEntryId: 'entry-mat', eliminatedRoundWeekId: 'week-1' },
+    ]);
+  });
+
+  it('eliminates on a resolved fixture even when the gameweek spans days', () => {
+    // The real shape of a Premier League gameweek: Friday night, Saturday
+    // lunchtime, Sunday afternoon. Two results in, one to come.
+    const plan = planResultProcessing(
+      state({
+        selections: [
+          selection({ roundEntryId: 'entry-a', teamId: teamId(1) }), // won
+          selection({ roundEntryId: 'entry-b', teamId: teamId(20) }), // lost
+          selection({ roundEntryId: 'entry-c', teamId: teamId(5) }), // not played
+        ],
+        entries: [
+          roundEntry({ id: 'entry-a', playerId: 'player-a' }),
+          roundEntry({ id: 'entry-b', playerId: 'player-b' }),
+          roundEntry({ id: 'entry-c', playerId: 'player-c' }),
+        ],
+        fixtures: [
+          played(1, 20, 'HOME'),
+          fixture({ matchday: 5, homeTeamId: teamId(5), awayTeamId: teamId(16), status: 'TIMED' }),
+        ],
+      }),
+      NOW,
+    );
+
+    expect(plan.eliminateEntries).toEqual([
+      { roundEntryId: 'entry-b', eliminatedRoundWeekId: 'week-1' },
+    ]);
+    expect(plan.pendingCount).toBe(1);
+    expect(plan.roundOutcome).toBeNull();
+  });
+
+  it('does not eliminate on a draw that has not been played yet', () => {
+    // Guards the obvious mistake: an unplayed fixture must not read as a draw
+    // just because both goal counts are null.
+    const plan = planResultProcessing(
+      state({
+        selections: [selection({ roundEntryId: 'entry-a', teamId: teamId(1) })],
+        entries: [roundEntry({ id: 'entry-a', playerId: 'player-a' })],
+        fixtures: [
+          fixture({ matchday: 5, homeTeamId: teamId(1), awayTeamId: teamId(20), status: 'TIMED' }),
+        ],
+      }),
+      NOW,
+    );
+    expect(plan.eliminateEntries).toEqual([]);
+    expect(plan.pendingCount).toBe(1);
   });
 
   it('flags a cancelled fixture for the administrator', () => {

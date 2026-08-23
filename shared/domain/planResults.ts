@@ -108,18 +108,31 @@ export function planResultProcessing(state: ResultState, now: string): ResultPla
 
   const resolution = resolveRoundWeek({ selections: effective });
 
+  /**
+   * Eliminate a player as soon as *their own* selection resolves against them,
+   * without waiting for the rest of the week.
+   *
+   * A lost or drawn fixture is final — there is no path back from it — so making
+   * people wait produces a table that contradicts itself: a red ✗ against the
+   * pick while the player still reads "Alive", sometimes for days when a
+   * gameweek spans a weekend.
+   *
+   * Only the *round's* outcome genuinely needs every result in, because you
+   * cannot know who is last standing until nothing is outstanding. That
+   * distinction is why `weekStatus` and `roundOutcome` below remain gated on
+   * `resolution` while this does not.
+   */
   const eliminateEntries: ResultPlan['eliminateEntries'] = [];
-  if (resolution.kind !== 'PENDING') {
-    const eliminatedEntryIds = effective
-      .filter((entry) => entry.outcome === 'ELIMINATED')
-      .map((entry) => entry.roundEntryId);
+  const eliminatedEntryIds = effective
+    .filter((entry) => entry.outcome === 'ELIMINATED')
+    .map((entry) => entry.roundEntryId);
 
-    for (const entryId of new Set(eliminatedEntryIds)) {
-      const entry = state.entries.find((candidate) => candidate.id === entryId);
-      // Only a change if they are not already marked out.
-      if (entry && entry.status === 'ALIVE') {
-        eliminateEntries.push({ roundEntryId: entryId, eliminatedRoundWeekId: week.id });
-      }
+  for (const entryId of new Set(eliminatedEntryIds)) {
+    const entry = state.entries.find((candidate) => candidate.id === entryId);
+    // Only a change if they are not already marked out — this is what keeps
+    // repeated runs idempotent.
+    if (entry && entry.status === 'ALIVE') {
+      eliminateEntries.push({ roundEntryId: entryId, eliminatedRoundWeekId: week.id });
     }
   }
 
