@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { adminMutations, adminReads } from '@/lib/adminApi';
+import { adminMutations, adminReads, setPlayerNotify } from '@/lib/adminApi';
 import { Feedback, useAction } from './AdminPage';
 
 /**
@@ -129,9 +129,31 @@ export function AdminPlayers() {
                     </span>
                   )}
                 </div>
-                <div className="row__meta">{player.email ?? 'no email'}</div>
+                <div className="row__meta">
+                  {player.email ?? 'no email'}
+                  {player.notifyByEmail === false && ' · emails muted'}
+                </div>
               </div>
               <div className="row__actions">
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={busy || !player.email}
+                  title={
+                    player.email
+                      ? 'Elimination, winner and rollover emails'
+                      : 'No email address on file'
+                  }
+                  onClick={() =>
+                    void run(async () => {
+                      const next = player.notifyByEmail === false;
+                      await setPlayerNotify(player.id, next);
+                      return `${player.displayName} will ${next ? 'now' : 'no longer'} get result emails.`;
+                    }, load)
+                  }
+                >
+                  {player.notifyByEmail === false ? 'Unmute' : 'Mute emails'}
+                </button>
                 <button
                   type="button"
                   className={`btn btn--small ${player.active ? 'btn--danger' : ''}`}

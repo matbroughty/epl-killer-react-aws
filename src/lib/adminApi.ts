@@ -127,6 +127,11 @@ export async function updateRound(input: {
   return unwrap(await authedClient.models.KillerRound.update(input));
 }
 
+/** Notification preference: a display setting, so no mutation or audit needed. */
+export async function setPlayerNotify(playerId: string, notifyByEmail: boolean) {
+  return unwrap(await authedClient.models.Player.update({ id: playerId, notifyByEmail }));
+}
+
 export async function updateWeekDeadline(roundWeekId: string, deadline: string) {
   return unwrap(
     await authedClient.models.RoundWeek.update({

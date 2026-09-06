@@ -20,7 +20,16 @@ import type {
   SelectionType,
   StandingsSnapshot,
 } from '../../shared/domain/types.js';
+import { computePot } from '../../shared/domain/money.js';
+import {
+  eliminationMessage,
+  finalTwoMessage,
+  rolloverMessage,
+  winnerMessage,
+  type Message,
+} from '../../shared/domain/notifications.js';
 import { recordAudit, SYSTEM_ACTOR } from './audit.js';
+import { sendAll, type Recipient } from './email.js';
 import { isConditionalCheckFailure } from './client.js';
 import type { Repository } from './repository.js';
 import type { ResolvedViewer } from './viewer.js';
@@ -392,6 +401,8 @@ export interface ResultProcessingResult {
   rolloverOutPence: number | null;
   needsAttention: { selectionId: string; reason: string }[];
   dryRun: boolean;
+  /** Populated once notifications have been attempted. */
+  emails?: { sent: number; skipped: string[]; failed: string[] };
 }
 
 export async function executeResultProcessing(
@@ -503,5 +514,154 @@ export async function executeResultProcessing(
     });
   }
 
+  // Notify last, once every write has succeeded. An email announcing an
+  // elimination that then failed to persist would be the worst possible order.
+  await notifyFromPlan(repository, state, plan, result);
+
   return { plan, result };
+}
+
+/**
+ * Email the people this plan affects.
+ *
+ * Exactly-once delivery falls out of the planner rather than needing a sent-log:
+ * an elimination only appears in a plan while the entry is still `ALIVE`, and a
+ * round outcome only while the round is still `ACTIVE`. Once applied, neither
+ * appears again, so the fifteen-minute scheduler cannot re-send.
+ *
+ * Failures are swallowed. Results processing has already committed.
+ */
+async function notifyFromPlan(
+  repository: Repository,
+  state: ResultState,
+  plan: ResultPlan,
+  result: ResultProcessingResult,
+): Promise<void> {
+  if (plan.eliminateEntries.length === 0 && !plan.roundOutcome) return;
+
+  try {
+    const [players, week, round] = await Promise.all([
+      repository.players(),
+      repository.week(plan.roundWeekId),
+      repository.round(state.round.id),
+    ]);
+
+    const playersById = new Map(players.map((player) => [player.id, player]));
+    const matchday = week?.matchday ?? null;
+    const roundNumber = round?.number ?? 0;
+
+    const pot = computePot(
+      { rolloverInPence: state.round.rolloverInPence ?? 0 },
+      state.entries.map((entry) => ({
+        paid: entry.paid,
+        entryFeePence: entry.entryFeePence ?? state.round.entryFeePence,
+      })),
+    );
+
+    const toRecipient = (playerId: string) => {
+      const player = playersById.get(playerId);
+      return {
+        email: player?.email ?? null,
+        displayName: player?.displayName ?? 'Player',
+        notifyByEmail: player?.notifyByEmail ?? true,
+      };
+    };
+
+    // Survivor count *after* this week, which is what the copy talks about.
+    const eliminatedNow = new Set(plan.eliminateEntries.map((entry) => entry.roundEntryId));
+    const survivorCount = state.entries.filter(
+      (entry) =>
+        !eliminatedNow.has(entry.id) &&
+        entry.status !== 'ELIMINATED',
+    ).length;
+
+    const outbox: { recipient: Recipient; message: Message }[] = [];
+
+    for (const elimination of plan.eliminateEntries) {
+      const entry = state.entries.find((candidate) => candidate.id === elimination.roundEntryId);
+      if (!entry) continue;
+      const selection = state.selections.find(
+        (candidate) => candidate.roundEntryId === elimination.roundEntryId,
+      );
+
+      outbox.push({
+        recipient: toRecipient(entry.playerId),
+        message: eliminationMessage({
+          displayName: playersById.get(entry.playerId)?.displayName ?? 'there',
+          teamName: selection?.teamName ?? null,
+          matchday,
+          roundNumber,
+          survivorCount,
+          wasAutoPick: selection?.selectionType === 'AUTO_LOWEST_POSITION',
+        }),
+      });
+    }
+
+    if (plan.roundOutcome?.kind === 'WON') {
+      const { winnerPlayerId, winnerEntryId, potPence } = plan.roundOutcome;
+      const selection = state.selections.find(
+        (candidate) => candidate.roundEntryId === winnerEntryId,
+      );
+      const weeks = await repository.weeks(state.round.id);
+
+      outbox.push({
+        recipient: toRecipient(winnerPlayerId),
+        message: winnerMessage({
+          displayName: playersById.get(winnerPlayerId)?.displayName ?? 'there',
+          roundNumber,
+          potPence,
+          teamName: selection?.teamName ?? null,
+          matchday,
+          entrantCount: state.entries.length,
+          weeksSurvived: weeks.length,
+        }),
+      });
+    }
+
+    if (plan.roundOutcome?.kind === 'ROLLOVER') {
+      // Everyone gets this one — it is news for the whole group, and it makes
+      // the next round more attractive.
+      for (const entry of state.entries) {
+        outbox.push({
+          recipient: toRecipient(entry.playerId),
+          message: rolloverMessage({
+            displayName: playersById.get(entry.playerId)?.displayName ?? 'there',
+            roundNumber,
+            rolloverPence: plan.roundOutcome.rolloverOutPence,
+            matchday,
+          }),
+        });
+      }
+    }
+
+    // Reaching the last two is worth telling people about; surviving an ordinary
+    // week is not, and a weekly "you're still in" would earn a mail filter.
+    if (plan.roundOutcome?.kind === 'CONTINUE' && plan.roundOutcome.survivorCount === 2) {
+      for (const entry of state.entries) {
+        if (eliminatedNow.has(entry.id) || entry.status === 'ELIMINATED') continue;
+        const selection = state.selections.find(
+          (candidate) => candidate.roundEntryId === entry.id,
+        );
+        outbox.push({
+          recipient: toRecipient(entry.playerId),
+          message: finalTwoMessage({
+            displayName: playersById.get(entry.playerId)?.displayName ?? 'there',
+            roundNumber,
+            teamName: selection?.teamName ?? null,
+            matchday,
+            survivorCount: 2,
+            potPence: pot.totalPotPence,
+          }),
+        });
+      }
+    }
+
+    const sent = await sendAll(outbox);
+    result.emails = sent;
+    console.log(
+      `Notifications: ${sent.sent} sent, ${sent.skipped.length} skipped, ${sent.failed.length} failed`,
+    );
+  } catch (error) {
+    console.error('Notification step failed (results were still applied):', error);
+  }
 }

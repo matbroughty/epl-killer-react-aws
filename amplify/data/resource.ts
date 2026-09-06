@@ -91,6 +91,12 @@ const schema = a
         /** Set when the invitation is accepted; null for imported legacy players. */
         cognitoUserId: a.string().authorization((allow) => [allow.group('ADMIN')]),
         active: a.boolean().required(),
+        /**
+         * Whether to email this player when they are eliminated, win, or the
+         * round rolls over. Defaults on; automated mail to real people needs an
+         * off switch even among friends.
+         */
+        notifyByEmail: a.boolean().default(true),
         entries: a.hasMany('RoundEntry', 'playerId'),
       })
       .secondaryIndexes((index) => [
