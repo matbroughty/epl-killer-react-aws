@@ -30,15 +30,19 @@
   // domain code and the import script all typecheck together, which is what you
   // want when they share the same rules.
   //
-  // `amplify/data` is here because the frontend imports the `Schema` type from
-  // it. The Lambda handlers and their helpers are not: they import
-  // `$amplify/env/*`, which Amplify generates at deploy time, and `ampx`
-  // typechecks and bundles them (see `npm run typecheck:backend`).
+  // `amplify/shared` is included so `npm run typecheck` covers the backend
+  // helpers. Leaving it out once let a type error reach CI: the local check went
+  // green while the Amplify build failed on a file it had never looked at.
+  //
+  // Only the two Lambda *handlers* stay out, because they import `$amplify/env/*`
+  // which Amplify generates at deploy time. `npm run typecheck:backend` covers
+  // those once a sandbox has run; the Amplify build always does.
   "include": [
     "src",
     "shared",
     "scripts",
     "amplify/data",
+    "amplify/shared",
     "amplify/functions/*/resource.ts",
     "vite.config.ts",
     "vitest.config.ts"

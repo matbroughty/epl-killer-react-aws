@@ -801,7 +801,15 @@ export async function adminCreateRoundWeek(
   viewer: ResolvedViewer,
   clock: Clock,
   input: { killerRoundId: string; matchday: number; deadline?: string | null; open?: boolean | null },
-): Promise<{ ok: boolean; roundWeekId: string; deadline: string | null; deadlineSource: string }> {
+): Promise<{
+  ok: boolean;
+  roundWeekId: string;
+  deadline: string | null;
+  deadlineSource: string;
+  /** What opening this week settled in earlier ones, if anything. */
+  settled: string[];
+  message: string;
+}> {
   requireAdmin(viewer);
 
   const round = await repository.round(input.killerRoundId);
@@ -895,7 +903,7 @@ export async function adminSetWeekStatus(
   viewer: ResolvedViewer,
   clock: Clock,
   input: { roundWeekId: string; status: string },
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; settled: string[]; message: string }> {
   requireAdmin(viewer);
 
   const status = input.status.toUpperCase() as RoundWeekStatus;
