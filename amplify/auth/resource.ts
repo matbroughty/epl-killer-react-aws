@@ -25,6 +25,28 @@ export const auth = defineAuth({
     email: true,
   },
 
+  /**
+   * Send through SES rather than Cognito's built-in sender.
+   *
+   * The default (`COGNITO_DEFAULT`) is capped at 50 emails a day, sends from a
+   * generic no-reply address and signs nothing against this domain — invitations
+   * routinely landed in spam. `fourfold.co.uk` is a DKIM-verified SES identity in
+   * this account and region, so mail is signed and arrives.
+   *
+   * This matters most for **password resets**, which are the only self-service
+   * route back in for a player who has forgotten theirs. Without working email
+   * every reset is a manual admin command.
+   *
+   * `fromEmail` must stay a verified SES identity in the same region as the user
+   * pool, or Cognito cannot send at all. See the SES section of the README.
+   */
+  senders: {
+    email: {
+      fromEmail: 'killer@fourfold.co.uk',
+      fromName: 'Fourfold Killer',
+    },
+  },
+
   groups: ['ADMIN'],
 
   /**
