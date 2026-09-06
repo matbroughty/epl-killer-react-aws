@@ -243,7 +243,7 @@ reused:
 | Region | `eu-west-2` |
 | Branch | `main` |
 | Domain | `killer.fourfold.co.uk` |
-| SPA rewrite | `/<*>` → `/index.html` (404-200), already configured |
+| SPA rewrite | 200 rewrite to `/index.html`, excluding asset extensions (see below) |
 
 ### One-time setup
 
@@ -313,6 +313,44 @@ In the console the equivalent is *App settings → IAM roles → Service role �
 service role*, which builds the same thing. Note that the console lists existing **roles**, not
 policies — if you go looking for a policy name there you will not find one.
 
+#### The SPA rewrite rule
+
+Client-side routing needs Amplify to serve `index.html` for any path that is not a real file.
+**This is app-level hosting config, not part of the Gen 2 backend**, so it lives in the Amplify
+console rather than in this repository — which means it would be lost if the app were ever
+recreated. Recorded here for that reason:
+
+```json
+[
+  {
+    "source": "</^[^.]+$|\\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>",
+    "target": "/index.html",
+    "status": "200"
+  }
+]
+```
+
+```bash
+aws amplify update-app --app-id d3kbnyd2qvlcqc --region eu-west-2 \
+  --custom-rules file://spa-rules.json
+```
+
+The regex matters: it excludes asset extensions, so `/assets/index-abc.js` is served as JavaScript
+rather than being rewritten to HTML. Get that wrong and the bundle 404s and the whole site breaks,
+so verify both after any change:
+
+```bash
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' https://killer.fourfold.co.uk/rules
+curl -s -o /dev/null -w '%{http_code} %{content_type}\n' https://killer.fourfold.co.uk/assets/<bundle>.js
+```
+
+Want `200 text/html` for the first and `200 text/javascript` for the second.
+
+The app previously used `{"source": "/<*>", "target": "/index.html", "status": "404-200"}`, which
+served the right page but returned **HTTP 404** for every deep route. That was harmless when the
+site had no routing, but it stops WhatsApp and iMessage generating link previews — which matters
+when that is how the competition gets shared.
+
 #### If you reuse a role from another Amplify app
 
 This account shares `AMPLIFY_ASSUME` across apps. Setting it as the service role is not enough on
@@ -322,7 +360,7 @@ assume-role denial that does not name the real cause.
 
 `aws:SourceArn` accepts an array, so each app that uses the role needs an entry:
 
-```json
+```
 "ArnLike": {
   "aws:SourceArn": [
     "arn:aws:amplify:eu-west-2:343893643132:apps/dl1ttg477pxdt*",
