@@ -689,6 +689,33 @@ button {
   margin: 48px auto;
 }
 
+/* ------------------------------------------------------------------- rules */
+
+.rules {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.rules li + li {
+  margin-top: 8px;
+}
+
+.card p {
+  margin: 0 0 10px;
+}
+
+.card p:last-child {
+  margin-bottom: 0;
+}
+
+code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-raised);
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
 /* ------------------------------------------------------------------ footer */
 
 .footer {

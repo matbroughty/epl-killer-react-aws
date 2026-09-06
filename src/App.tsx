@@ -2,14 +2,16 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { AdminPage } from '@/pages/admin/AdminPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { HomePage } from '@/pages/HomePage';
+import { RulesPage } from '@/pages/RulesPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { useAuth } from '@/lib/auth';
 
 /**
  * The application shell and routes.
  *
- * Four routes. The public competition view is the default, so the site remains
- * useful to anyone who follows a link without an account.
+ * Five routes. The public competition view is the default, so the site remains
+ * useful to anyone who follows a link without an account — as are the rules and
+ * the history, which are the two things somebody sent a link is likely to want.
  */
 export default function App() {
   return (
@@ -19,6 +21,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/rules" element={<RulesPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route
             path="/admin/*"
@@ -69,6 +72,12 @@ function Masthead() {
       </div>
 
       <nav className="masthead__nav">
+        <NavLink
+          to="/rules"
+          className={({ isActive }) => `navlink ${isActive ? 'navlink--active' : ''}`}
+        >
+          Rules
+        </NavLink>
         <NavLink
           to="/history"
           className={({ isActive }) => `navlink ${isActive ? 'navlink--active' : ''}`}

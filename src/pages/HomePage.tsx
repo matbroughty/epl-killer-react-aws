@@ -139,7 +139,7 @@ export function HomePage() {
 
       <p className="faint center" style={{ marginTop: 20 }}>
         Win and you survive. Draw or lose and you are out. A team can only be used once per
-        Killer Round. <Link to="/history">Past rounds →</Link>
+        Killer Round. <Link to="/rules">Full rules</Link> · <Link to="/history">Past rounds</Link>
       </p>
     </>
   );
