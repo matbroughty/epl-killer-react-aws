@@ -108,8 +108,14 @@ export function RulesPage() {
         <h2 className="card__title">Odds and ends</h2>
         <ul className="rules">
           <li>
-            <strong>Postponed match?</strong> Your pick stays pending until it is played. You are
-            never knocked out because a game was called off.
+            <strong>Postponed match?</strong> Your pick stays pending while there is still a chance
+            it gets played. You are never knocked out because a game was called off.
+          </li>
+          <li>
+            <strong>Postponed and not rearranged in time?</strong> You get the benefit of the doubt
+            and go through <em>as though your team had won</em>. The team still counts as used, so
+            you cannot pick them again this round. That ruling is final — if the match is
+            eventually played and your team loses, you stay in.
           </li>
           <li>
             <strong>Eliminated?</strong> You are out for the rest of that Killer Round, but you go

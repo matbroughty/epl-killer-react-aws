@@ -331,6 +331,123 @@ describe('planResultProcessing', () => {
     expect(plan.roundOutcome).toMatchObject({ kind: 'WON' });
   });
 
+  describe('leniency when the next Round Week opens', () => {
+    const postponedScenario = () =>
+      state({
+        selections: [
+          selection({ roundEntryId: 'entry-mat', teamId: teamId(1) }), // won
+          selection({ roundEntryId: 'entry-dave', teamId: teamId(3) }), // postponed
+        ],
+        entries: [
+          roundEntry({ id: 'entry-mat', playerId: 'player-mat' }),
+          roundEntry({ id: 'entry-dave', playerId: 'player-dave' }),
+        ],
+        fixtures: [
+          played(1, 20, 'HOME'),
+          fixture({ matchday: 5, homeTeamId: teamId(3), awayTeamId: teamId(18), status: 'POSTPONED' }),
+        ],
+      });
+
+    it('leaves the week unresolved when leniency is not applied', () => {
+      const plan = planResultProcessing(postponedScenario(), NOW);
+      expect(plan.pendingCount).toBe(1);
+      expect(plan.lenientSurvivals).toEqual([]);
+      expect(plan.roundOutcome).toBeNull();
+    });
+
+    it('puts an unresolved pick through as a win', () => {
+      const plan = planResultProcessing(postponedScenario(), NOW, { applyLeniency: true });
+
+      expect(plan.lenientSurvivals).toEqual([
+        { selectionId: 'week-1#entry-dave', teamName: 'Liverpool' },
+      ]);
+      expect(plan.updateSelections).toContainEqual(
+        expect.objectContaining({
+          selectionId: 'week-1#entry-dave',
+          outcome: 'SURVIVED',
+          overridden: true,
+        }),
+      );
+      // The week can now settle, which is the whole point.
+      expect(plan.pendingCount).toBe(0);
+      expect(plan.roundOutcome).toEqual({ kind: 'CONTINUE', survivorCount: 2 });
+    });
+
+    it('marks the ruling final so a later result cannot reverse it', () => {
+      // Apply leniency, then play the rearranged fixture — and lose it.
+      const initial = postponedScenario();
+      const lenient = planResultProcessing(initial, NOW, { applyLeniency: true });
+      const afterLeniency = apply(initial, lenient);
+
+      // Mirror the executor: leniency sets `overridden` on the record.
+      const settled: ResultState = {
+        ...afterLeniency,
+        selections: afterLeniency.selections.map((s) =>
+          s.roundEntryId === 'entry-dave' ? { ...s, overridden: true } : s,
+        ),
+        fixtures: [played(1, 20, 'HOME'), played(3, 18, 'AWAY')], // team-03 lost
+      };
+
+      const later = planResultProcessing(settled, '2026-09-10T21:00:00.000Z');
+      expect(later.updateSelections).toEqual([]);
+      expect(later.eliminateEntries).toEqual([]);
+    });
+
+    it('never overturns a result that did resolve', () => {
+      // Leniency only ever upgrades a PENDING. A genuine loss stays a loss.
+      const plan = planResultProcessing(
+        state({
+          selections: [selection({ roundEntryId: 'entry-dave', teamId: teamId(20) })],
+          entries: [roundEntry({ id: 'entry-dave', playerId: 'player-dave' })],
+          fixtures: [played(1, 20, 'HOME')],
+        }),
+        NOW,
+        { applyLeniency: true },
+      );
+
+      expect(plan.lenientSurvivals).toEqual([]);
+      expect(plan.updateSelections[0]).toMatchObject({ outcome: 'ELIMINATED' });
+      expect(plan.eliminateEntries).toHaveLength(1);
+    });
+
+    it('can produce a winner that a postponement was holding up', () => {
+      const plan = planResultProcessing(
+        state({
+          selections: [
+            selection({ roundEntryId: 'entry-mat', teamId: teamId(3) }), // postponed
+            selection({ roundEntryId: 'entry-dave', teamId: teamId(20) }), // lost
+          ],
+          entries: [
+            roundEntry({ id: 'entry-mat', playerId: 'player-mat' }),
+            roundEntry({ id: 'entry-dave', playerId: 'player-dave' }),
+          ],
+          fixtures: [
+            played(1, 20, 'HOME'),
+            fixture({ matchday: 5, homeTeamId: teamId(3), awayTeamId: teamId(18), status: 'POSTPONED' }),
+          ],
+        }),
+        NOW,
+        { applyLeniency: true },
+      );
+
+      expect(plan.roundOutcome).toMatchObject({ kind: 'WON', winnerPlayerId: 'player-mat' });
+    });
+
+    it('is idempotent — a second lenient run changes nothing', () => {
+      const initial = postponedScenario();
+      const first = planResultProcessing(initial, NOW, { applyLeniency: true });
+      const afterFirst: ResultState = {
+        ...apply(initial, first),
+        selections: apply(initial, first).selections.map((s) =>
+          s.roundEntryId === 'entry-dave' ? { ...s, overridden: true } : s,
+        ),
+      };
+      const second = planResultProcessing(afterFirst, NOW, { applyLeniency: true });
+      expect(second.empty).toBe(true);
+      expect(second.lenientSurvivals).toEqual([]);
+    });
+  });
+
   describe('idempotency', () => {
     const winnerScenario = () =>
       state({

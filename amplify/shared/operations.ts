@@ -467,6 +467,67 @@ export async function adminStartRound(
 }
 
 /**
+ * Settle any earlier Round Weeks that are still unresolved.
+ *
+ * Called when an administrator **opens the next Round Week** — the moment the
+ * competition declares the previous one over. Any pick whose fixture was
+ * postponed out of the gameweek and never rearranged in time goes through as
+ * though the team had won. The team still counts as used, because the selection
+ * keeps its `teamId`.
+ *
+ * Without this a single postponement holds a Killer Round up indefinitely: the
+ * week never leaves `RESULTS_PENDING` and no winner can be declared.
+ *
+ * Returns a description of anything it ruled on, so the caller can tell the
+ * administrator what just happened rather than doing it silently.
+ */
+export async function settleEarlierWeeks(
+  repository: Repository,
+  viewer: ResolvedViewer,
+  clock: Clock,
+  killerRoundId: string,
+  newWeekSequenceNumber: number,
+): Promise<string[]> {
+  const { executeResultProcessing, loadResultState } = await import('./processing.js');
+  const notes: string[] = [];
+
+  const weeks = await repository.weeks(killerRoundId);
+  const earlier = weeks
+    .filter(
+      (week) =>
+        week.sequenceNumber < newWeekSequenceNumber &&
+        week.status !== 'COMPLETE' &&
+        week.status !== 'DRAFT',
+    )
+    .sort((a, b) => a.sequenceNumber - b.sequenceNumber);
+
+  for (const week of earlier) {
+    const state = await loadResultState(repository, week.id);
+    if (!state) continue;
+
+    const { result } = await executeResultProcessing(
+      repository,
+      state,
+      clock,
+      viewer,
+      false,
+      { applyLeniency: true },
+    );
+
+    if (result.lenientSurvivals > 0) {
+      notes.push(
+        `Week ${week.sequenceNumber} (GW${week.matchday}): ${result.lenientSurvivals} pick(s) went through on an unresolved fixture.`,
+      );
+    }
+    if (result.eliminated > 0) {
+      notes.push(`Week ${week.sequenceNumber}: ${result.eliminated} player(s) eliminated.`);
+    }
+  }
+
+  return notes;
+}
+
+/**
  * Enter a pick on a player's behalf.
  *
  * Picks arrive by message rather than through the app — especially in the first
@@ -803,11 +864,21 @@ export async function adminCreateRoundWeek(
       : undefined,
   });
 
+  // Opening a new week is the moment the previous one is declared over.
+  const settled = input.open
+    ? await settleEarlierWeeks(repository, viewer, clock, round.id, sequenceNumber)
+    : [];
+
   return {
     ok: true,
     roundWeekId,
     deadline,
     deadlineSource: input.deadline ? 'MANUAL' : 'FIRST_FIXTURE',
+    settled,
+    message:
+      settled.length > 0
+        ? `Round Week added. ${settled.join(' ')}`
+        : 'Round Week added.',
   };
 }
 
@@ -851,7 +922,24 @@ export async function adminSetWeekStatus(
     after: { status },
   });
 
-  return { ok: true };
+  // Opening a week declares any earlier one over, exactly as creating an open
+  // week does — otherwise "add as draft, open later" would skip the ruling.
+  const settled =
+    status === 'OPEN'
+      ? await settleEarlierWeeks(
+          repository,
+          viewer,
+          clock,
+          week.killerRoundId,
+          week.sequenceNumber,
+        )
+      : [];
+
+  return {
+    ok: true,
+    settled,
+    message: settled.length > 0 ? `Week ${status}. ${settled.join(' ')}` : `Week ${status}.`,
+  };
 }
 
 /**

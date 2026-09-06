@@ -24,7 +24,12 @@ export interface ResultPlan {
     outcome: SelectionOutcome;
     fixtureId: string | null;
     resolvedAt: string | null;
+    /** Set when leniency decided this, so it is never recomputed. */
+    overridden?: boolean;
+    note?: string;
   }[];
+  /** Selections given the benefit of the doubt under leniency. */
+  lenientSurvivals: { selectionId: string; teamName: string | null }[];
   /** Entries to mark eliminated, with the week that did it. */
   eliminateEntries: { roundEntryId: string; eliminatedRoundWeekId: string }[];
   /** The single survivor, when the round has been won. */
@@ -59,7 +64,28 @@ export interface ResultState {
   fixtures: readonly Fixture[];
 }
 
-export function planResultProcessing(state: ResultState, now: string): ResultPlan {
+export interface ResultOptions {
+  /**
+   * Give unresolved picks the benefit of the doubt.
+   *
+   * Applied when an administrator opens the *next* Round Week, which is the
+   * moment the competition declares this one over. A fixture postponed out of
+   * the gameweek and not rearranged in time would otherwise hold the whole round
+   * up indefinitely, so the player goes through as though their team had won —
+   * and the team still counts as used, because the selection keeps its `teamId`.
+   *
+   * The ruling is marked `overridden` so it sticks. If the rearranged match is
+   * eventually played and lost, the player is *not* retrospectively knocked out
+   * — they have already been told they went through.
+   */
+  applyLeniency?: boolean;
+}
+
+export function planResultProcessing(
+  state: ResultState,
+  now: string,
+  options: ResultOptions = {},
+): ResultPlan {
   const { week, round } = state;
   const matchdayFixtures =
     week.matchday === null
@@ -68,6 +94,7 @@ export function planResultProcessing(state: ResultState, now: string): ResultPla
 
   const updateSelections: ResultPlan['updateSelections'] = [];
   const needsAttention: ResultPlan['needsAttention'] = [];
+  const lenientSurvivals: ResultPlan['lenientSurvivals'] = [];
   /** The outcome each selection *should* have, whether or not it changed. */
   const effective: { roundEntryId: string; outcome: SelectionOutcome }[] = [];
 
@@ -76,12 +103,39 @@ export function planResultProcessing(state: ResultState, now: string): ResultPla
       ? findFixtureForTeam(selection.teamId, matchdayFixtures)
       : null;
 
-    const outcome = resolveOutcome({ selection, fixture });
+    const resolved = resolveOutcome({ selection, fixture });
+
+    // Leniency: the round is moving on, so anything still unresolved goes
+    // through. Only ever upgrades a PENDING — it never overturns a real result.
+    const lenient =
+      options.applyLeniency === true && resolved === 'PENDING' && !selection.overridden;
+    const outcome: SelectionOutcome = lenient ? 'SURVIVED' : resolved;
+
     effective.push({ roundEntryId: selection.roundEntryId, outcome });
 
     // An administrator has ruled on this one. Leave the record exactly as they
     // left it — not even the fixture link gets rewritten.
     if (selection.overridden) continue;
+
+    if (lenient) {
+      lenientSurvivals.push({
+        selectionId: selection.id,
+        teamName: selection.teamName,
+      });
+      updateSelections.push({
+        selectionId: selection.id,
+        outcome: 'SURVIVED',
+        fixtureId: fixture?.id ?? selection.fixtureId ?? null,
+        resolvedAt: now,
+        // Marked final: a rearranged match played later must not retrospectively
+        // knock out somebody who has already been told they went through.
+        overridden: true,
+        note:
+          `Fixture unresolved when the next Round Week opened. Given the benefit of the doubt ` +
+          `and treated as a win; the team still counts as used.`,
+      });
+      continue;
+    }
 
     if (needsAdminAttention(fixture)) {
       needsAttention.push({
@@ -187,6 +241,7 @@ export function planResultProcessing(state: ResultState, now: string): ResultPla
   return {
     roundWeekId: week.id,
     updateSelections,
+    lenientSurvivals,
     eliminateEntries,
     winnerEntryId,
     weekStatus,

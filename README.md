@@ -664,6 +664,22 @@ fixture is outstanding, so `WON` and `ROLLOVER` are only decided once every sele
 has resolved. A postponed match therefore delays the *result of the round*, never an individual
 elimination that is already certain.
 
+### Leniency on unresolved fixtures
+
+A postponement that is never rearranged would otherwise hold a Killer Round up forever — the week
+never leaves `RESULTS_PENDING` and no winner can be declared.
+
+So **opening the next Round Week settles the previous one**: any pick still unresolved goes through
+as though the team had won. The team still counts as used, because the selection keeps its
+`teamId`. The administrator chooses that moment by opening the next week, which is why leniency is
+not on a timer — the competition moves on when you say it does.
+
+The ruling is written with `overridden: true` and audited as `LENIENT_SURVIVAL`, so it is final.
+If the rearranged match is eventually played and lost, the player is **not** retrospectively
+knocked out — they have already been told they went through, and in some cases emailed about it.
+
+Leniency only ever upgrades a `PENDING`. It never overturns a real result.
+
 ### Manual processing and overrides
 
 *Admin → Round Weeks* has **Lock & auto-pick** and **Process results** per week. Both are safe to

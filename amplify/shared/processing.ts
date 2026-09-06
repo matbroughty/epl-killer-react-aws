@@ -6,6 +6,7 @@ import {
 } from '../../shared/domain/planDeadline.js';
 import {
   planResultProcessing,
+  type ResultOptions,
   type ResultPlan,
   type ResultState,
 } from '../../shared/domain/planResults.js';
@@ -393,6 +394,8 @@ export async function executeDeadlineProcessing(
 
 export interface ResultProcessingResult {
   roundWeekId: string;
+  /** Picks that went through because their fixture never resolved. */
+  lenientSurvivals: number;
   selectionsUpdated: number;
   eliminated: number;
   pendingCount: number;
@@ -411,12 +414,14 @@ export async function executeResultProcessing(
   clock: Clock,
   actor: ResolvedViewer = SYSTEM_ACTOR,
   dryRun = false,
+  options: ResultOptions = {},
 ): Promise<{ plan: ResultPlan; result: ResultProcessingResult }> {
   const now = clock.nowIso();
-  const plan = planResultProcessing(state, now);
+  const plan = planResultProcessing(state, now, options);
 
   const result: ResultProcessingResult = {
     roundWeekId: plan.roundWeekId,
+    lenientSurvivals: plan.lenientSurvivals.length,
     selectionsUpdated: plan.updateSelections.length,
     eliminated: plan.eliminateEntries.length,
     pendingCount: plan.pendingCount,
@@ -440,6 +445,22 @@ export async function executeResultProcessing(
       outcome: update.outcome,
       fixtureId: update.fixtureId,
       resolvedAt: update.resolvedAt,
+      // Only set when leniency ruled; otherwise left as-is so a normal result
+      // never accidentally marks a selection final.
+      ...(update.overridden ? { overridden: true, overrideNote: update.note ?? null } : {}),
+    });
+  }
+
+  for (const lenient of plan.lenientSurvivals) {
+    await recordAudit(repository, actor, now, {
+      action: 'LENIENT_SURVIVAL',
+      entityType: 'Selection',
+      entityId: lenient.selectionId,
+      killerRoundId: state.round.id,
+      after: { outcome: 'SURVIVED', teamName: lenient.teamName },
+      note:
+        'Fixture was still unresolved when the next Round Week opened, so the player went through. ' +
+        'The team remains used for this Killer Round.',
     });
   }
 
