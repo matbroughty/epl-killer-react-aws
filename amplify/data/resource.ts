@@ -525,6 +525,25 @@ const schema = a
       .handler(a.handler.function(killerApi))
       .authorization((allow) => [allow.group('ADMIN')]),
 
+    /**
+     * Set a player's password directly.
+     *
+     * The reliable way in when email is not working, and the only way to help
+     * somebody who cannot receive a reset code. Temporary by default, so the
+     * player is forced to choose their own on first sign-in.
+     */
+    adminSetPassword: a
+      .mutation()
+      .arguments({
+        playerId: a.id().required(),
+        password: a.string().required(),
+        /** True to make it their real password; false forces a change at sign-in. */
+        permanent: a.boolean(),
+      })
+      .returns(a.json())
+      .handler(a.handler.function(killerApi))
+      .authorization((allow) => [allow.group('ADMIN')]),
+
     /** Deactivate a player without deleting any of their history. */
     adminSetPlayerActive: a
       .mutation()

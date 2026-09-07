@@ -41,6 +41,28 @@ backend.auth.resources.cfnResources.cfnUserPool.adminCreateUserConfig = {
 };
 
 /**
+ * Point Cognito at the SES **domain** identity, not the address.
+ *
+ * `defineAuth`'s `senders.email.fromEmail` makes Amplify derive the SourceArn
+ * from the address itself — `identity/killer@fourfold.co.uk`. That identity does
+ * not exist and cannot easily be made to: verifying an address requires clicking
+ * a link sent to it, and there is no mailbox there.
+ *
+ * The result was silent failure. Cognito accepted the configuration, then every
+ * send failed against a non-existent identity — `SentLast24Hours` sat at zero
+ * while invitations appeared to have been issued.
+ *
+ * `fourfold.co.uk` is verified with DKIM, which authorises *any* address at that
+ * domain, so pointing the ARN at the domain fixes it while still sending as
+ * `killer@fourfold.co.uk`.
+ */
+backend.auth.resources.cfnResources.cfnUserPool.emailConfiguration = {
+  emailSendingAccount: 'DEVELOPER',
+  from: 'Fourfold Killer <killer@fourfold.co.uk>',
+  sourceArn: `arn:aws:ses:${backend.stack.region}:${backend.stack.account}:identity/fourfold.co.uk`,
+};
+
+/**
  * Let both functions send player notifications through SES.
  *
  * Scoped to the `fourfold.co.uk` identity rather than `*`: these Lambdas should

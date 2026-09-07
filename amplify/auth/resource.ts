@@ -57,6 +57,15 @@ export const auth = defineAuth({
   access: (allow) => [
     allow
       .resource(killerApi)
-      .to(['createUser', 'addUserToGroup', 'listUsers', 'getUser', 'updateUserAttributes']),
+      .to([
+        'createUser',
+        'addUserToGroup',
+        'listUsers',
+        'getUser',
+        'updateUserAttributes',
+        // Lets an administrator set a starting password, or reset one, without
+        // depending on email delivery at all.
+        'setUserPassword',
+      ]),
   ],
 });

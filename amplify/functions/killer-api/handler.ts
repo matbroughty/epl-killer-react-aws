@@ -12,7 +12,11 @@ import { FootballDataOrgProvider } from '../../../shared/provider/footballDataOr
 import type { SyncKind } from '../../../shared/domain/types.js';
 import type { Schema } from '../../data/resource.js';
 import type { KillerClient } from '../../shared/client.js';
-import { adminInvitePlayer, adminSetPlayerActive } from '../../shared/invite.js';
+import {
+  adminInvitePlayer,
+  adminSetPassword,
+  adminSetPlayerActive,
+} from '../../shared/invite.js';
 import {
   adminCompleteRound,
   adminCreateRoundWeek,
@@ -158,6 +162,19 @@ export const handler = async (event: ResolverEvent): Promise<unknown> => {
           playerId: asString(args['playerId'], 'playerId'),
           entered: args['entered'] === true,
         });
+
+      case 'adminSetPassword':
+        return await adminSetPassword(
+          repository,
+          viewer,
+          clock,
+          env.AMPLIFY_AUTH_USERPOOL_ID,
+          {
+            playerId: asString(args['playerId'], 'playerId'),
+            password: asString(args['password'], 'password'),
+            permanent: args['permanent'] === true,
+          },
+        );
 
       case 'adminSetPlayerActive':
         return await adminSetPlayerActive(repository, viewer, clock, {

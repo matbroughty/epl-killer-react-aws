@@ -155,6 +155,11 @@ export const adminMutations = {
       .adminInvitePlayer(input)
       .then((result) => assertOk(unwrap<MutationResult>(result))),
 
+  setPassword: (playerId: string, password: string, permanent: boolean) =>
+    authedClient.mutations
+      .adminSetPassword({ playerId, password, permanent })
+      .then((result) => assertOk(unwrap<MutationResult>(result))),
+
   setPlayerActive: (playerId: string, active: boolean) =>
     authedClient.mutations
       .adminSetPlayerActive({ playerId, active })

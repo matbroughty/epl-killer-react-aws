@@ -1,9 +1,11 @@
 import {
   AdminAddUserToGroupCommand,
   AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
   ListUsersCommand,
   UsernameExistsException,
+  UserNotFoundException,
 } from '@aws-sdk/client-cognito-identity-provider';
 import type { Clock } from '../../shared/domain/clock.js';
 import { recordAudit } from './audit.js';
@@ -155,6 +157,91 @@ async function findCognitoSub(userPoolId: string, email: string): Promise<string
   return (
     response.Users?.[0]?.Attributes?.find((attribute) => attribute.Name === 'sub')?.Value ?? null
   );
+}
+
+/**
+ * Set a player's password directly.
+ *
+ * Email delivery is the weak link in getting people signed in — invitations and
+ * reset codes both go through it, and when it fails there is no self-service way
+ * back in. This is the path that does not depend on it at all: set a password,
+ * tell the player however you actually reach them.
+ *
+ * **Temporary by default.** `permanent: false` leaves Cognito in
+ * `FORCE_CHANGE_PASSWORD`, so the administrator's chosen password stops working
+ * the moment the player signs in and picks their own. That matters when the
+ * password is being passed over a group chat.
+ *
+ * Audited either way, without the password: who reset whose login is worth
+ * knowing, and the value itself never belongs in an audit log.
+ */
+export async function adminSetPassword(
+  repository: Repository,
+  viewer: ResolvedViewer,
+  clock: Clock,
+  userPoolId: string,
+  input: { playerId: string; password: string; permanent?: boolean | null },
+): Promise<{ ok: boolean; message: string; permanent: boolean }> {
+  requireAdmin(viewer);
+
+  const player = await repository.player(input.playerId);
+  if (!player) throw new OperationError('No such player.', 'NO_SUCH_PLAYER');
+  if (!player.email) {
+    throw new OperationError(
+      `${player.displayName} has no email address, so there is no login to set a password for.`,
+      'NO_EMAIL',
+    );
+  }
+
+  // Mirrors the pool policy in backend.ts. Checked here so the error names the
+  // actual rule rather than surfacing Cognito's generic complaint.
+  if (input.password.length < 10) {
+    throw new OperationError('Password must be at least 10 characters.', 'PASSWORD_TOO_SHORT');
+  }
+  if (!/[a-z]/.test(input.password) || !/\d/.test(input.password)) {
+    throw new OperationError(
+      'Password must contain a lower-case letter and a number.',
+      'PASSWORD_TOO_WEAK',
+    );
+  }
+
+  const permanent = input.permanent === true;
+
+  try {
+    await cognito.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: userPoolId,
+        Username: player.email,
+        Password: input.password,
+        Permanent: permanent,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof UserNotFoundException) {
+      throw new OperationError(
+        `${player.displayName} has no Cognito login yet. Invite them first, then set a password.`,
+        'NO_LOGIN',
+      );
+    }
+    throw error;
+  }
+
+  await recordAudit(repository, viewer, clock.nowIso(), {
+    action: permanent ? 'PASSWORD_SET_PERMANENT' : 'PASSWORD_SET_TEMPORARY',
+    entityType: 'Player',
+    entityId: player.id,
+    // Deliberately no password, not even a hash or a length.
+    after: { permanent, forcesChangeAtNextSignIn: !permanent },
+    note: `Password set for ${player.displayName} by an administrator.`,
+  });
+
+  return {
+    ok: true,
+    permanent,
+    message: permanent
+      ? `Password set for ${player.displayName}. They can sign in with it and will not be asked to change it.`
+      : `Temporary password set for ${player.displayName}. They will be asked to choose their own on first sign-in.`,
+  };
 }
 
 /** Activate or deactivate a player. Their history is never deleted. */

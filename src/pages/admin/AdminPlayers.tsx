@@ -20,6 +20,7 @@ export function AdminPlayers() {
   const [email, setEmail] = useState('');
   const [makeAdmin, setMakeAdmin] = useState(false);
   const [sendInvite, setSendInvite] = useState(true);
+  const [passwordFor, setPasswordFor] = useState<string | null>(null);
   const { busy, error, message, run } = useAction();
 
   const load = useCallback(async () => {
@@ -118,7 +119,8 @@ export function AdminPlayers() {
         <h2 className="card__title">Players ({players.length})</h2>
         <div className="rows">
           {players.map((player) => (
-            <div className="row" key={player.id}>
+            <div key={player.id}>
+            <div className="row">
               <div className="row__main">
                 <div className="row__name">
                   {player.displayName}{' '}
@@ -135,6 +137,14 @@ export function AdminPlayers() {
                 </div>
               </div>
               <div className="row__actions">
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  disabled={busy || !player.email}
+                  onClick={() => setPasswordFor(passwordFor === player.id ? null : player.id)}
+                >
+                  {passwordFor === player.id ? 'Cancel' : 'Set password'}
+                </button>
                 <button
                   type="button"
                   className="btn btn--small"
@@ -172,10 +182,108 @@ export function AdminPlayers() {
                 </button>
               </div>
             </div>
+            {passwordFor === player.id && (
+              <SetPasswordPanel
+                playerId={player.id}
+                displayName={player.displayName}
+                busy={busy}
+                run={run}
+                onDone={() => setPasswordFor(null)}
+                reload={load}
+              />
+            )}
+            </div>
           ))}
           {players.length === 0 && <div className="empty">No players yet.</div>}
         </div>
       </section>
     </>
+  );
+}
+
+/**
+ * Set a password for one player.
+ *
+ * The dependable route in when email is not working — and it has not been. The
+ * default is a *temporary* password, so whatever the admin types stops working
+ * as soon as the player signs in and chooses their own. That matters when the
+ * password is about to be sent over a group chat.
+ */
+function SetPasswordPanel({
+  playerId,
+  displayName,
+  busy,
+  run,
+  onDone,
+  reload,
+}: {
+  playerId: string;
+  displayName: string;
+  busy: boolean;
+  run: ReturnType<typeof useAction>['run'];
+  onDone: () => void;
+  reload: () => Promise<void>;
+}) {
+  const [password, setPassword] = useState('');
+  const [permanent, setPermanent] = useState(false);
+
+  const tooShort = password.length > 0 && password.length < 10;
+  const tooWeak = password.length >= 10 && !(/[a-z]/.test(password) && /\d/.test(password));
+
+  return (
+    <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      <div className="field">
+        <label className="field__label">Password for {displayName}</label>
+        <input
+          className="input"
+          type="text"
+          autoComplete="off"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="at least 10 characters, with a number"
+        />
+        <div className="field__hint">
+          Shown as plain text on purpose — you have to be able to read it back to them.
+          {tooShort && ' Too short.'}
+          {tooWeak && ' Needs a lower-case letter and a number.'}
+        </div>
+      </div>
+
+      <div className="field">
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={permanent}
+            onChange={(event) => setPermanent(event.target.checked)}
+          />
+          <span>Permanent — do not make them change it</span>
+        </label>
+        <div className="field__hint">
+          Leave unticked (recommended): they will be asked to choose their own on first sign-in,
+          so this password stops working straight away.
+        </div>
+      </div>
+
+      <div className="row__actions">
+        <button
+          type="button"
+          className="btn btn--primary btn--small"
+          disabled={busy || password.length < 10 || tooWeak}
+          onClick={() =>
+            void run(async () => {
+              const result = await adminMutations.setPassword(playerId, password, permanent);
+              setPassword('');
+              onDone();
+              return String(result['message'] ?? 'Password set.');
+            }, reload)
+          }
+        >
+          Set password
+        </button>
+        <button type="button" className="btn btn--small" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
