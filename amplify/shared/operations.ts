@@ -467,6 +467,167 @@ export async function adminStartRound(
 }
 
 /**
+ * Reopen a round that was settled wrongly.
+ *
+ * Results are computed from imported fixture data, but the *picks* are only as
+ * good as what was recorded — and when picks arrive by message, one that never
+ * got entered gets an automatic team instead. If that team loses, the round can
+ * be declared over on a false premise.
+ *
+ * This puts it back: `WON`/`ROLLOVER` returns to `ACTIVE`, the winner is
+ * cleared, and whoever was marked `WINNER` goes back to `ALIVE`. It deliberately
+ * does **not** touch selections or eliminations — correct those separately with
+ * `adminOverrideSelection`, so each change is audited on its own terms.
+ */
+export async function adminReopenRound(
+  repository: Repository,
+  viewer: ResolvedViewer,
+  clock: Clock,
+  input: { killerRoundId: string; note?: string | null },
+): Promise<{ ok: boolean; message: string }> {
+  requireAdmin(viewer);
+
+  const round = await repository.round(input.killerRoundId);
+  if (!round) throw new OperationError('No such Killer Round.', 'NO_SUCH_ROUND');
+  if (round.status === 'ACTIVE') {
+    return { ok: true, message: `Round ${round.number} is already active.` };
+  }
+  if (round.status === 'DRAFT') {
+    throw new OperationError('That round has not started yet.', 'NOT_STARTED');
+  }
+  if (round.dataSource === 'LEGACY_CSV') {
+    throw new OperationError(
+      'Imported historical rounds cannot be reopened — they have no fixtures to reprocess.',
+      'LEGACY_ROUND',
+    );
+  }
+
+  const now = clock.nowIso();
+  const entries = await repository.entries(round.id);
+  const wasWinner = entries.filter((entry) => entry.status === 'WINNER');
+
+  for (const entry of wasWinner) {
+    await repository.models.RoundEntry.update({
+      id: entry.id,
+      status: 'ALIVE',
+      eliminatedRoundWeekId: null,
+    });
+  }
+
+  await repository.models.KillerRound.update({
+    id: round.id,
+    status: 'ACTIVE',
+    winnerPlayerId: null,
+    rolloverOutPence: 0,
+    completedAt: null,
+  });
+
+  await recordAudit(repository, viewer, now, {
+    action: 'KILLER_ROUND_REOPENED',
+    entityType: 'KillerRound',
+    entityId: round.id,
+    killerRoundId: round.id,
+    before: {
+      status: round.status,
+      winnerPlayerId: round.winnerPlayerId,
+      rolloverOutPence: round.rolloverOutPence,
+    },
+    after: { status: 'ACTIVE', restoredToAlive: wasWinner.length },
+    note: input.note ?? 'Round reopened by an administrator.',
+  });
+
+  return {
+    ok: true,
+    message: `Round ${round.number} reopened (was ${round.status}). ${wasWinner.length} entry restored to alive.`,
+  };
+}
+
+/**
+ * Delete a round and everything under it.
+ *
+ * For a round created by mistake, or one superseded because an earlier round
+ * turned out not to be finished. Genuinely destructive, so it refuses when there
+ * is real history to lose: **any selection with a resolved outcome blocks it**.
+ * A round where results have landed should be settled or reopened, never
+ * deleted.
+ */
+export async function adminDeleteRound(
+  repository: Repository,
+  viewer: ResolvedViewer,
+  clock: Clock,
+  input: { killerRoundId: string; note?: string | null },
+): Promise<{ ok: boolean; message: string; deleted: Record<string, number> }> {
+  requireAdmin(viewer);
+
+  const round = await repository.round(input.killerRoundId);
+  if (!round) throw new OperationError('No such Killer Round.', 'NO_SUCH_ROUND');
+  if (round.status === 'WON' || round.status === 'ROLLOVER') {
+    throw new OperationError(
+      `Round ${round.number} has been settled and is part of the competition's history. Reopen it instead if it was settled wrongly.`,
+      'ROUND_SETTLED',
+    );
+  }
+  if (round.dataSource === 'LEGACY_CSV') {
+    throw new OperationError('Imported historical rounds cannot be deleted.', 'LEGACY_ROUND');
+  }
+
+  const [weeks, entries, selections] = await Promise.all([
+    repository.weeks(round.id),
+    repository.entries(round.id),
+    repository.selectionsByRound(round.id),
+  ]);
+
+  const resolved = selections.filter(
+    (selection) => selection.outcome === 'SURVIVED' || selection.outcome === 'ELIMINATED',
+  );
+  if (resolved.length > 0) {
+    throw new OperationError(
+      `Round ${round.number} has ${resolved.length} selection(s) with results already applied. Deleting it would destroy real history — reopen or settle it instead.`,
+      'HAS_RESULTS',
+    );
+  }
+
+  const now = clock.nowIso();
+
+  // Audit *before* deleting, so the record survives what it describes.
+  await recordAudit(repository, viewer, now, {
+    action: 'KILLER_ROUND_DELETED',
+    entityType: 'KillerRound',
+    entityId: round.id,
+    before: {
+      number: round.number,
+      status: round.status,
+      weeks: weeks.map((week) => ({ sequenceNumber: week.sequenceNumber, matchday: week.matchday })),
+      entrantCount: entries.length,
+      selectionCount: selections.length,
+    },
+    note: input.note ?? 'Round deleted by an administrator.',
+  });
+
+  // Children first, so nothing is left orphaned if this stops halfway.
+  for (const selection of selections) {
+    await repository.models.Selection.delete({ id: selection.id });
+  }
+  for (const entry of entries) {
+    await repository.models.RoundEntry.delete({ id: entry.id });
+  }
+  for (const week of weeks) {
+    await repository.models.RoundWeek.delete({ id: week.id });
+  }
+  await repository.models.KillerRound.delete({ id: round.id });
+
+  return {
+    ok: true,
+    message: `Round ${round.number} deleted: ${weeks.length} week(s), ${entries.length} entry(ies), ${selections.length} selection(s).`,
+    deleted: {
+      weeks: weeks.length,
+      entries: entries.length,
+      selections: selections.length,
+    },
+  };
+}
+
+/**
  * Settle any earlier Round Weeks that are still unresolved.
  *
  * Called when an administrator **opens the next Round Week** — the moment the

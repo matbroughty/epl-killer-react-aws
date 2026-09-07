@@ -190,6 +190,16 @@ export const adminMutations = {
       .adminStartRound({ killerRoundId, playerIds: playerIds ?? null })
       .then((result) => assertOk(unwrap<MutationResult>(result))),
 
+  reopenRound: (killerRoundId: string, note?: string) =>
+    authedClient.mutations
+      .adminReopenRound({ killerRoundId, note: note ?? null })
+      .then((result) => assertOk(unwrap<MutationResult>(result))),
+
+  deleteRound: (killerRoundId: string, note?: string) =>
+    authedClient.mutations
+      .adminDeleteRound({ killerRoundId, note: note ?? null })
+      .then((result) => assertOk(unwrap<MutationResult>(result))),
+
   completeRound: (input: {
     killerRoundId: string;
     resolution: 'WON' | 'ROLLOVER' | 'ABANDONED';

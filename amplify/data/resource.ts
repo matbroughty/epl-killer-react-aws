@@ -579,6 +579,33 @@ const schema = a
       .handler(a.handler.function(killerApi))
       .authorization((allow) => [allow.group('ADMIN')]),
 
+    /**
+     * Put a wrongly-settled round back to ACTIVE.
+     *
+     * Results are only as good as the picks recorded against them; a pick that
+     * never got entered gets an automatic team, which can end a round on a false
+     * premise.
+     */
+    adminReopenRound: a
+      .mutation()
+      .arguments({ killerRoundId: a.id().required(), note: a.string() })
+      .returns(a.json())
+      .handler(a.handler.function(killerApi))
+      .authorization((allow) => [allow.group('ADMIN')]),
+
+    /**
+     * Delete a round and its weeks, entries and selections.
+     *
+     * Refuses once any selection has a result, so real history cannot be
+     * destroyed by accident.
+     */
+    adminDeleteRound: a
+      .mutation()
+      .arguments({ killerRoundId: a.id().required(), note: a.string() })
+      .returns(a.json())
+      .handler(a.handler.function(killerApi))
+      .authorization((allow) => [allow.group('ADMIN')]),
+
     /** Declare a winner or a rollover by hand, e.g. when the season ends. */
     adminCompleteRound: a
       .mutation()

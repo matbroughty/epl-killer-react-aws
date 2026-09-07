@@ -132,6 +132,58 @@ export function AdminRounds() {
                     Start
                   </button>
                 )}
+                {(round.status === 'WON' || round.status === 'ROLLOVER') &&
+                  round.dataSource !== 'LEGACY_CSV' && (
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      disabled={busy}
+                      title="Put this round back to active — for when it was settled on a pick that had not been entered"
+                      onClick={() => {
+                        const note = window.prompt(
+                          `Why is Round ${round.number} being reopened? (recorded in the audit log)`,
+                          '',
+                        );
+                        if (note === null) return;
+                        void run(async () => {
+                          const result = await adminMutations.reopenRound(round.id, note || undefined);
+                          return String(result['message'] ?? 'Round reopened.');
+                        }, refresh);
+                      }}
+                    >
+                      Reopen
+                    </button>
+                  )}
+                {(round.status === 'DRAFT' || round.status === 'ACTIVE') &&
+                  round.dataSource !== 'LEGACY_CSV' && (
+                    <button
+                      type="button"
+                      className="btn btn--small btn--danger"
+                      disabled={busy}
+                      title="Delete this round entirely. Refused once any selection has a result."
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `Delete Round ${round.number} and all its weeks, entrants and picks?\n\nThis cannot be undone. It will be refused if any result has already been applied.`,
+                          )
+                        ) {
+                          return;
+                        }
+                        const note = window.prompt(
+                          'Why? (recorded in the audit log)',
+                          '',
+                        );
+                        if (note === null) return;
+                        void run(async () => {
+                          const result = await adminMutations.deleteRound(round.id, note || undefined);
+                          setSelectedRoundId('');
+                          return String(result['message'] ?? 'Round deleted.');
+                        }, refresh);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
               </div>
             </div>
           ))}

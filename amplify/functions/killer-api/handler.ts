@@ -20,6 +20,8 @@ import {
 import {
   adminCompleteRound,
   adminCreateRoundWeek,
+  adminDeleteRound,
+  adminReopenRound,
   adminOverrideSelection,
   adminSetEntrant,
   adminSetPaid,
@@ -202,6 +204,18 @@ export const handler = async (event: ResolverEvent): Promise<unknown> => {
         return await adminSetWeekStatus(repository, viewer, clock, {
           roundWeekId: asString(args['roundWeekId'], 'roundWeekId'),
           status: asString(args['status'], 'status'),
+        });
+
+      case 'adminReopenRound':
+        return await adminReopenRound(repository, viewer, clock, {
+          killerRoundId: asString(args['killerRoundId'], 'killerRoundId'),
+          note: asOptionalString(args['note']),
+        });
+
+      case 'adminDeleteRound':
+        return await adminDeleteRound(repository, viewer, clock, {
+          killerRoundId: asString(args['killerRoundId'], 'killerRoundId'),
+          note: asOptionalString(args['note']),
         });
 
       case 'adminCompleteRound':
