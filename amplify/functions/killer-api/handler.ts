@@ -93,7 +93,11 @@ export const handler = async (event: ResolverEvent): Promise<unknown> => {
   const args = event.arguments ?? {};
 
   try {
-    const viewer = await resolveViewer(event.identity, repository);
+    const viewer = await resolveViewer(
+      event.identity,
+      repository,
+      env.AMPLIFY_AUTH_USERPOOL_ID,
+    );
 
     switch (field) {
       // --- Public and player reads ---------------------------------------

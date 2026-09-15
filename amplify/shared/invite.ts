@@ -108,7 +108,14 @@ export async function adminInvitePlayer(
   } else {
     // A player record with no login: useful for importing somebody who pays in
     // cash and never signs in, and for the legacy CSV import.
-    message = `Player record created for ${displayName} without a login.`;
+    //
+    // But a login may already exist — created by hand, or by an earlier run —
+    // and leaving `cognitoUserId` null was what stranded seven players: they
+    // could sign in, yet never resolved to their own record. Link it if we can.
+    if (!cognitoUserId) cognitoUserId = await findCognitoSub(userPoolId, email);
+    message = cognitoUserId
+      ? `Player record created for ${displayName} and linked to their existing login.`
+      : `Player record created for ${displayName} without a login.`;
   }
 
   let playerId: string;
