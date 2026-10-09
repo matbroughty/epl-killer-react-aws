@@ -19,6 +19,7 @@ import {
 } from '../../shared/invite.js';
 import {
   adminCompleteRound,
+  adminChangeWeekMatchday,
   adminCreateRoundWeek,
   adminDeleteRound,
   adminReopenRound,
@@ -202,6 +203,14 @@ export const handler = async (event: ResolverEvent): Promise<unknown> => {
           matchday: asNumber(args['matchday'], 'matchday'),
           deadline: asOptionalString(args['deadline']),
           open: args['open'] === true,
+        });
+
+      case 'adminChangeWeekMatchday':
+        return await adminChangeWeekMatchday(repository, viewer, clock, {
+          roundWeekId: asString(args['roundWeekId'], 'roundWeekId'),
+          matchday: asNumber(args['matchday'], 'matchday'),
+          deadline: asOptionalString(args['deadline']),
+          note: asOptionalString(args['note']),
         });
 
       case 'adminSetWeekStatus':

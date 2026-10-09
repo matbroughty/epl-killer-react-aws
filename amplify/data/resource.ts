@@ -646,6 +646,22 @@ const schema = a
       .handler(a.handler.function(killerApi))
       .authorization((allow) => [allow.group('ADMIN')]),
 
+    /**
+     * Move a Round Week to a different gameweek, for one created against the
+     * wrong one. Discards the week's picks and reopens it.
+     */
+    adminChangeWeekMatchday: a
+      .mutation()
+      .arguments({
+        roundWeekId: a.id().required(),
+        matchday: a.integer().required(),
+        deadline: a.datetime(),
+        note: a.string(),
+      })
+      .returns(a.json())
+      .handler(a.handler.function(killerApi))
+      .authorization((allow) => [allow.group('ADMIN')]),
+
     /** Open or lock a week by hand. */
     adminSetWeekStatus: a
       .mutation()

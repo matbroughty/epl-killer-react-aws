@@ -977,12 +977,7 @@ export async function adminCreateRoundWeek(
   if (!round) throw new OperationError('No such Killer Round.', 'NO_SUCH_ROUND');
 
   const weeks = await repository.weeks(round.id);
-  if (weeks.some((week) => week.matchday === input.matchday)) {
-    throw new OperationError(
-      `Gameweek ${input.matchday} is already part of this Killer Round.`,
-      'DUPLICATE_MATCHDAY',
-    );
-  }
+  await assertMatchdayUnused(repository, round.seasonId, input.matchday);
 
   const fixtures = await repository.fixtures(round.seasonId, input.matchday);
   const proposed = proposeDeadline(
@@ -1048,6 +1043,188 @@ export async function adminCreateRoundWeek(
       settled.length > 0
         ? `Round Week added. ${settled.join(' ')}`
         : 'Round Week added.',
+  };
+}
+
+/**
+ * Refuse a gameweek that any Killer Round this season has already played.
+ *
+ * Rounds run one after another through the season, so a gameweek belongs to
+ * at most one of them. Choosing one that has already gone is always a mistake —
+ * its results are known — and it is an easy one to make from a dropdown.
+ */
+async function assertMatchdayUnused(
+  repository: Repository,
+  seasonId: string,
+  matchday: number,
+  exceptRoundWeekId?: string,
+): Promise<void> {
+  const rounds = await repository.rounds(seasonId);
+  for (const round of rounds) {
+    const weeks = await repository.weeks(round.id);
+    const clash = weeks.find(
+      (week) => week.matchday === matchday && week.id !== exceptRoundWeekId,
+    );
+    if (clash) {
+      throw new OperationError(
+        `Gameweek ${matchday} has already been used by Round ${round.number}, Week ${clash.sequenceNumber}.`,
+        'DUPLICATE_MATCHDAY',
+      );
+    }
+  }
+}
+
+/**
+ * Move a Round Week to a different gameweek, discarding its picks.
+ *
+ * For a week created against the wrong gameweek. Every pick made for it was a
+ * pick for the wrong fixtures, so all of them go — including automatic ones and
+ * any results already applied — and anybody this week eliminated is put back.
+ * The week returns to OPEN with a deadline from the new gameweek's first
+ * fixture, so picks can be made again.
+ *
+ * Only the latest week of an unsettled round can be moved: rewriting an earlier
+ * week would leave later weeks resting on picks that no longer exist, and a
+ * settled round must be reopened first so that reversal is audited on its own.
+ * The discarded picks are written to the audit log before they are deleted.
+ */
+export async function adminChangeWeekMatchday(
+  repository: Repository,
+  viewer: ResolvedViewer,
+  clock: Clock,
+  input: {
+    roundWeekId: string;
+    matchday: number;
+    deadline?: string | null;
+    note?: string | null;
+  },
+): Promise<{
+  ok: boolean;
+  deadline: string;
+  deadlineSource: string;
+  selectionsRemoved: number;
+  entriesRestored: number;
+  message: string;
+}> {
+  requireAdmin(viewer);
+
+  const week = await repository.week(input.roundWeekId);
+  if (!week) throw new OperationError('No such Round Week.', 'NO_SUCH_WEEK');
+
+  const round = await repository.round(week.killerRoundId);
+  if (!round) throw new OperationError('No such Killer Round.', 'NO_SUCH_ROUND');
+  if (round.dataSource === 'LEGACY_CSV') {
+    throw new OperationError('Imported historical rounds cannot be changed.', 'LEGACY_ROUND');
+  }
+  if (round.status !== 'ACTIVE' && round.status !== 'DRAFT') {
+    throw new OperationError(
+      `Round ${round.number} has been settled (${round.status}). Reopen it first if it was settled on this week.`,
+      'ROUND_SETTLED',
+    );
+  }
+  if (week.matchday === input.matchday) {
+    throw new OperationError(
+      `Week ${week.sequenceNumber} is already gameweek ${input.matchday}.`,
+      'SAME_MATCHDAY',
+    );
+  }
+
+  const weeks = await repository.weeks(round.id);
+  const later = weeks.filter((candidate) => candidate.sequenceNumber > week.sequenceNumber);
+  if (later.length > 0) {
+    throw new OperationError(
+      `Week ${week.sequenceNumber} is not the latest week of Round ${round.number}. Only the latest week can be moved to another gameweek.`,
+      'NOT_LATEST_WEEK',
+    );
+  }
+
+  await assertMatchdayUnused(repository, round.seasonId, input.matchday, week.id);
+
+  const fixtures = await repository.fixtures(round.seasonId, input.matchday);
+  const proposed = proposeDeadline(
+    fixtures.map((fixture) => ({
+      utcKickoff: fixture.utcKickoff,
+      status: (fixture.status ?? 'UNKNOWN') as 'SCHEDULED',
+    })),
+  );
+  const deadline = input.deadline ?? proposed;
+  if (!deadline) {
+    throw new OperationError(
+      `No fixtures have been imported for gameweek ${input.matchday}, so no deadline can be proposed. Sync fixtures first or set a deadline explicitly.`,
+      'NO_DEADLINE',
+    );
+  }
+  const deadlineSource = input.deadline ? 'MANUAL' : 'FIRST_FIXTURE';
+
+  const [selections, entries] = await Promise.all([
+    repository.selectionsByWeek(week.id),
+    repository.entries(round.id),
+  ]);
+  const eliminatedHere = entries.filter(
+    (entry) => entry.status === 'ELIMINATED' && entry.eliminatedRoundWeekId === week.id,
+  );
+
+  const now = clock.nowIso();
+
+  // Audit *before* deleting, so the discarded picks are still on record.
+  await recordAudit(repository, viewer, now, {
+    action: 'ROUND_WEEK_MATCHDAY_CHANGED',
+    entityType: 'RoundWeek',
+    entityId: week.id,
+    killerRoundId: round.id,
+    before: {
+      sequenceNumber: week.sequenceNumber,
+      matchday: week.matchday,
+      deadline: week.deadline,
+      deadlineSource: week.deadlineSource,
+      status: week.status,
+      selections: selections.map((selection) => ({
+        playerId: selection.playerId,
+        teamName: selection.teamName,
+        selectionType: selection.selectionType,
+        outcome: selection.outcome,
+      })),
+      eliminatedEntryIds: eliminatedHere.map((entry) => entry.id),
+    },
+    after: { matchday: input.matchday, deadline, deadlineSource, status: 'OPEN' },
+    note: input.note ?? `Week ${week.sequenceNumber} moved to gameweek ${input.matchday}.`,
+  });
+
+  for (const selection of selections) {
+    await repository.models.Selection.delete({ id: selection.id });
+  }
+  for (const entry of eliminatedHere) {
+    await repository.models.RoundEntry.update({
+      id: entry.id,
+      status: 'ALIVE',
+      eliminatedRoundWeekId: null,
+    });
+  }
+
+  await repository.models.RoundWeek.update({
+    id: week.id,
+    matchday: input.matchday,
+    deadline,
+    deadlineSource,
+    status: 'OPEN',
+    lockedAt: null,
+    // The table captured at the old lock no longer applies; a fresh one is
+    // taken when the new deadline passes.
+    standingsSnapshotId: null,
+    resultsProcessedAt: null,
+    completedAt: null,
+  });
+
+  return {
+    ok: true,
+    deadline,
+    deadlineSource,
+    selectionsRemoved: selections.length,
+    entriesRestored: eliminatedHere.length,
+    message:
+      `Week ${week.sequenceNumber} is now gameweek ${input.matchday}, open until ${deadline}. ` +
+      `${selections.length} pick(s) removed` +
+      (eliminatedHere.length > 0 ? `, ${eliminatedHere.length} player(s) back in.` : '.'),
   };
 }
 

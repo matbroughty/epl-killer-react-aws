@@ -23,6 +23,8 @@ type Player = Awaited<ReturnType<typeof adminReads.players>>[number];
 
 export function AdminWeeks() {
   const [rounds, setRounds] = useState<Round[]>([]);
+  const [allRounds, setAllRounds] = useState<Round[]>([]);
+  const [seasonWeeks, setSeasonWeeks] = useState<{ round: Round; week: Week }[]>([]);
   const [roundId, setRoundId] = useState('');
   const [weeks, setWeeks] = useState<Week[]>([]);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
@@ -39,6 +41,7 @@ export function AdminWeeks() {
 
   useEffect(() => {
     void adminReads.rounds().then((loaded) => {
+      setAllRounds(loaded);
       const live = loaded
         .filter((candidate) => candidate.dataSource !== 'LEGACY_CSV')
         .sort((a, b) => b.number - a.number);
@@ -49,25 +52,37 @@ export function AdminWeeks() {
     void adminReads.players().then(setPlayers);
   }, []);
 
-  const loadRound = useCallback(async (id: string, seasonId: string) => {
-    const [loadedWeeks, loadedFixtures, loadedTeams, loadedEntries] = await Promise.all([
-      adminReads.weeks(id),
-      adminReads.fixtures(seasonId),
-      adminReads.teams(seasonId),
-      adminReads.entries(id),
-    ]);
+  const loadRound = useCallback(async (id: string, seasonId: string, seasonRounds: Round[]) => {
+    const [loadedWeeks, loadedFixtures, loadedTeams, loadedEntries, loadedSeasonWeeks] =
+      await Promise.all([
+        adminReads.weeks(id),
+        adminReads.fixtures(seasonId),
+        adminReads.teams(seasonId),
+        adminReads.entries(id),
+        Promise.all(
+          seasonRounds.map(async (seasonRound) =>
+            (await adminReads.weeks(seasonRound.id)).map((week) => ({ round: seasonRound, week })),
+          ),
+        ),
+      ]);
     setWeeks(loadedWeeks.sort((a, b) => a.sequenceNumber - b.sequenceNumber));
+    setSeasonWeeks(loadedSeasonWeeks.flat());
     setFixtures(loadedFixtures);
     setTeams(loadedTeams.sort((a, b) => a.name.localeCompare(b.name, 'en-GB')));
     setEntries(loadedEntries);
   }, []);
 
+  const seasonRounds = useMemo(
+    () => (round ? allRounds.filter((candidate) => candidate.seasonId === round.seasonId) : []),
+    [allRounds, round],
+  );
+
   useEffect(() => {
-    if (round) void loadRound(round.id, round.seasonId);
-  }, [round, loadRound]);
+    if (round) void loadRound(round.id, round.seasonId, seasonRounds);
+  }, [round, seasonRounds, loadRound]);
 
   const reload = async () => {
-    if (round) await loadRound(round.id, round.seasonId);
+    if (round) await loadRound(round.id, round.seasonId, seasonRounds);
     if (openWeekId) setSelections(await adminReads.selections(openWeekId));
   };
 
@@ -76,14 +91,29 @@ export function AdminWeeks() {
     else setSelections([]);
   }, [openWeekId]);
 
-  /** Matchdays that have fixtures and are not already in this round. */
-  const availableMatchdays = useMemo(() => {
-    const used = new Set(weeks.map((week) => week.matchday));
+  /**
+   * Gameweeks already used by any round this season, and by which week. They
+   * stay in the dropdown, disabled, so it is obvious why one is unavailable.
+   */
+  const usedMatchdays = useMemo(() => {
+    const used = new Map<number, string>();
+    for (const { round: usedRound, week } of seasonWeeks) {
+      if (week.matchday !== null && week.matchday !== undefined) {
+        used.set(week.matchday, `Round ${usedRound.number}, Week ${week.sequenceNumber}`);
+      }
+    }
+    return used;
+  }, [seasonWeeks]);
+
+  /** Every matchday that has fixtures, used or not. */
+  const allMatchdays = useMemo(() => {
     const all = new Set(
       fixtures.filter((fixture) => fixture.matchday > 0).map((fixture) => fixture.matchday),
     );
-    return [...all].filter((day) => !used.has(day)).sort((a, b) => a - b);
-  }, [fixtures, weeks]);
+    return [...all].sort((a, b) => a - b);
+  }, [fixtures]);
+
+  const availableMatchdays = allMatchdays.filter((day) => !usedMatchdays.has(day));
 
   const matchdayFixtures = matchday
     ? fixtures.filter((fixture) => fixture.matchday === Number(matchday))
@@ -144,14 +174,11 @@ export function AdminWeeks() {
                     }}
                   >
                     <option value="">Choose a gameweek…</option>
-                    {availableMatchdays.map((day) => (
-                      <option key={day} value={day}>
-                        GW{day}
-                      </option>
-                    ))}
+                    <MatchdayOptions days={allMatchdays} used={usedMatchdays} />
                   </select>
                   <div className="field__hint">
-                    Gameweeks do not have to be consecutive.
+                    Gameweeks do not have to be consecutive. Gameweeks already used this season
+                    are disabled.
                   </div>
                 </div>
 
@@ -337,6 +364,13 @@ export function AdminWeeks() {
           {openWeekId && (
             <WeekSelections
               week={weeks.find((week) => week.id === openWeekId)!}
+              canChangeMatchday={
+                (round.status === 'ACTIVE' || round.status === 'DRAFT') &&
+                weeks[weeks.length - 1]?.id === openWeekId
+              }
+              matchdays={allMatchdays}
+              usedMatchdays={usedMatchdays}
+              fixtures={fixtures}
               entries={entries}
               players={players}
               selections={selections}
@@ -349,6 +383,19 @@ export function AdminWeeks() {
           )}
         </>
       )}
+    </>
+  );
+}
+
+function MatchdayOptions({ days, used }: { days: number[]; used: Map<number, string> }) {
+  return (
+    <>
+      {days.map((day) => (
+        <option key={day} value={day} disabled={used.has(day)}>
+          GW{day}
+          {used.has(day) ? ` (used — ${used.get(day)})` : ''}
+        </option>
+      ))}
     </>
   );
 }
@@ -366,6 +413,10 @@ function teamName(teams: Team[], teamId: string | null | undefined): string {
  */
 function WeekSelections({
   week,
+  canChangeMatchday,
+  matchdays,
+  usedMatchdays,
+  fixtures,
   entries,
   players,
   selections,
@@ -376,6 +427,10 @@ function WeekSelections({
   onDeadlineSaved,
 }: {
   week: Week;
+  canChangeMatchday: boolean;
+  matchdays: number[];
+  usedMatchdays: Map<number, string>;
+  fixtures: Fixture[];
   entries: Entry[];
   players: Player[];
   selections: Selection[];
@@ -386,6 +441,20 @@ function WeekSelections({
   onDeadlineSaved: () => Promise<void>;
 }) {
   const [newDeadline, setNewDeadline] = useState('');
+  const [newMatchday, setNewMatchday] = useState('');
+  const [newMatchdayOverride, setNewMatchdayOverride] = useState('');
+  const newMatchdayDeadline = newMatchday
+    ? proposeDeadline(
+        fixtures
+          .filter((fixture) => fixture.matchday === Number(newMatchday))
+          .map((fixture) => ({
+            utcKickoff: fixture.utcKickoff,
+            status: (fixture.status ?? 'UNKNOWN') as 'SCHEDULED',
+          })),
+      )
+    : null;
+  const newMatchdayStarted =
+    newMatchdayDeadline !== null && new Date(newMatchdayDeadline).getTime() <= Date.now();
   const playersById = new Map(players.map((player) => [player.id, player]));
   const byEntry = new Map(selections.map((selection) => [selection.roundEntryId, selection]));
 
@@ -424,6 +493,98 @@ function WeekSelections({
             Save
           </button>
         </div>
+
+        {canChangeMatchday && (
+          <>
+            <div className="spread" style={{ alignItems: 'flex-end', marginBottom: 14 }}>
+              <div className="field" style={{ flex: 1, marginBottom: 0, minWidth: 200 }}>
+                <label className="field__label" htmlFor="new-matchday">
+                  Change gameweek
+                </label>
+                <select
+                  id="new-matchday"
+                  className="select"
+                  value={newMatchday}
+                  onChange={(event) => {
+                    setNewMatchday(event.target.value);
+                    setNewMatchdayOverride('');
+                  }}
+                >
+                  <option value="">Choose a gameweek…</option>
+                  <MatchdayOptions days={matchdays} used={usedMatchdays} />
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn btn--danger"
+                disabled={busy || !newMatchday}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `Move Week ${week.sequenceNumber} from ${formatMatchday(week.matchday)} to GW${newMatchday}?\n\n` +
+                        'Every pick for this week is removed (they are kept in the audit log), anyone ' +
+                        'it eliminated is put back in, and the week reopens for new picks.',
+                    )
+                  ) {
+                    return;
+                  }
+                  const note = window.prompt('Why? (recorded in the audit log)', '');
+                  if (note === null) return;
+                  void run(async () => {
+                    const result = await adminMutations.changeWeekMatchday({
+                      roundWeekId: week.id,
+                      matchday: Number(newMatchday),
+                      deadline: newMatchdayOverride
+                        ? new Date(newMatchdayOverride).toISOString()
+                        : null,
+                      note: note || null,
+                    });
+                    setNewMatchday('');
+                    setNewMatchdayOverride('');
+                    return String(result['message'] ?? 'Gameweek changed.');
+                  }, reload);
+                }}
+              >
+                Change
+              </button>
+            </div>
+            {newMatchday && (
+              <>
+                {newMatchdayDeadline && !newMatchdayOverride && (
+                  <div
+                    className={`notice ${newMatchdayStarted ? 'notice--warn' : 'notice--info'}`}
+                  >
+                    The deadline will become <b>{formatDateTime(newMatchdayDeadline)}</b> (first
+                    fixture of GW{newMatchday}).
+                    {newMatchdayStarted && (
+                      <>
+                        {' '}
+                        <b>That has already passed</b>, so within 15 minutes the scheduler would
+                        lock the week, auto-pick for everyone and apply results. Set a deadline in
+                        the future below, enter the picks, then use Lock &amp; auto-pick yourself.
+                      </>
+                    )}
+                  </div>
+                )}
+                <div className="field">
+                  <label className="field__label" htmlFor="new-matchday-deadline">
+                    Deadline for the moved week (optional)
+                  </label>
+                  <input
+                    id="new-matchday-deadline"
+                    className="input"
+                    type="datetime-local"
+                    value={newMatchdayOverride}
+                    onChange={(event) => setNewMatchdayOverride(event.target.value)}
+                  />
+                  <div className="field__hint">
+                    Local time. Leave blank to use the first kick-off of GW{newMatchday}.
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         <div className="notice notice--info">
           <strong>Entering picks received by message.</strong> Choose a team next to each player and

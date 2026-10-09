@@ -220,6 +220,16 @@ export const adminMutations = {
       .adminCreateRoundWeek(input)
       .then((result) => assertOk(unwrap<MutationResult>(result))),
 
+  changeWeekMatchday: (input: {
+    roundWeekId: string;
+    matchday: number;
+    deadline?: string | null;
+    note?: string | null;
+  }) =>
+    authedClient.mutations
+      .adminChangeWeekMatchday(input)
+      .then((result) => assertOk(unwrap<MutationResult>(result))),
+
   setWeekStatus: (roundWeekId: string, status: string) =>
     authedClient.mutations
       .adminSetWeekStatus({ roundWeekId, status })
