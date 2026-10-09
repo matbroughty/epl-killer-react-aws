@@ -13,7 +13,8 @@
     "typecheck:backend": "tsc --noEmit -p amplify/tsconfig.json",
     "sandbox": "ampx sandbox",
     "import:legacy": "tsx scripts/import-legacy-csv.ts",
-    "bulk": "tsx scripts/bulk-entry.ts"
+    "bulk": "tsx scripts/bulk-entry.ts",
+    "change-week": "tsx scripts/change-week-gameweek.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sesv2": "^3.1127.0",
