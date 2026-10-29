@@ -510,7 +510,7 @@ function RoundDetail({
           </div>
         </div>
 
-        {round.status === 'DRAFT' && (
+        {(round.status === 'DRAFT' || round.status === 'ACTIVE') && (
           <div style={{ marginTop: 14 }}>
             <div className="spread" style={{ alignItems: 'flex-end' }}>
               <div className="field" style={{ flex: 1, marginBottom: 0, minWidth: 120 }}>
@@ -522,6 +522,7 @@ function RoundDetail({
                   className="input"
                   inputMode="decimal"
                   value={feeEdit}
+                  disabled={round.status !== 'DRAFT'}
                   onChange={(event) => setFeeEdit(event.target.value)}
                 />
               </div>
@@ -545,7 +546,9 @@ function RoundDetail({
                   void run(async () => {
                     await updateRound({
                       id: round.id,
-                      entryFeePence: parsePoundsToPence(feeEdit),
+                      ...(round.status === 'DRAFT'
+                        ? { entryFeePence: parsePoundsToPence(feeEdit) }
+                        : {}),
                       rolloverInPence: parsePoundsToPence(rolloverEdit),
                     });
                     return 'Round updated.';
@@ -556,8 +559,8 @@ function RoundDetail({
               </button>
             </div>
             <p className="field__hint">
-              Only editable while the round is a draft — once it starts, each entry holds its own
-              fee so history cannot be rewritten.
+              The fee is only editable while the round is a draft — once it starts, each entry holds
+              its own fee so history cannot be rewritten. The rollover can be corrected any time.
             </p>
           </div>
         )}

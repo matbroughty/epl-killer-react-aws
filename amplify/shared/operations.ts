@@ -425,8 +425,24 @@ export async function adminStartRound(
   // Carry the pot forward if the previous round rolled over and this round has
   // not already been given a rollover by hand.
   let rolloverInPence = round.rolloverInPence ?? 0;
-  if (round.previousRoundId && rolloverInPence === 0) {
-    const previous = await repository.round(round.previousRoundId);
+  let previousRoundId = round.previousRoundId ?? null;
+  if (!previousRoundId && rolloverInPence === 0) {
+    // The admin did not link a previous round by hand. If the nearest earlier
+    // round in this season rolled over and nobody has claimed its pot, link it,
+    // otherwise a chain of rollovers silently resets to one round's entries.
+    const seasonRounds = await repository.rounds(round.seasonId);
+    const claimed = new Set(
+      seasonRounds.map((other) => other.previousRoundId).filter((id): id is string => !!id),
+    );
+    const candidate = seasonRounds
+      .filter((other) => other.number < round.number)
+      .sort((a, b) => b.number - a.number)[0];
+    if (candidate?.status === 'ROLLOVER' && !claimed.has(candidate.id)) {
+      previousRoundId = candidate.id;
+    }
+  }
+  if (previousRoundId && rolloverInPence === 0) {
+    const previous = await repository.round(previousRoundId);
     if (previous?.status === 'ROLLOVER') {
       if (previous.rolloverOutPence && previous.rolloverOutPence > 0) {
         rolloverInPence = previous.rolloverOutPence;
@@ -450,6 +466,7 @@ export async function adminStartRound(
     status: 'ACTIVE',
     startedAt: now,
     rolloverInPence,
+    previousRoundId,
   });
 
   const entrants = await repository.entries(round.id);
